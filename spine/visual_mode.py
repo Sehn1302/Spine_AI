@@ -26,6 +26,7 @@ def run_visual_mode(spine: SpineOrchestrator, voice: VoiceInterface, orb: Visual
             skip_greeting=True,
             start_awake=False,
             sleep_timeout=90,
+            conversational=True,
         )
         orb.stop()
 

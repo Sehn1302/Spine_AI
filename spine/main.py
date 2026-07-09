@@ -57,20 +57,23 @@ def main() -> None:
         stt_model=voice_cfg.get("stt_model", "base"),
         stt_device=voice_cfg.get("stt_device", "cuda"),
         tts_voice=voice_cfg.get("tts_voice", "en-GB-RyanNeural"),
-        record_seconds=voice_cfg.get("record_seconds", 5),
+        record_seconds=voice_cfg.get("record_seconds", 6),
         sample_rate=voice_cfg.get("sample_rate", 16000),
         input_device=voice_cfg.get("input_device", "default"),
         output_device=voice_cfg.get("output_device", "default"),
         sleep_listen_seconds=wake_cfg.get("sleep_listen_seconds", 2),
+        min_peak=voice_cfg.get("min_peak", 0.003),
+        auto_bluetooth=voice_cfg.get("auto_bluetooth", True),
     )
 
     wake_kwargs = {
         "start_awake": not wake_cfg.get("start_asleep", False),
         "sleep_timeout": wake_cfg.get("sleep_timeout_seconds", 90),
+        "conversational": voice_cfg.get("conversational", True),
     }
 
     orb = VisualOrb(
-        size=visual_cfg.get("orb_size", 220),
+        size=visual_cfg.get("orb_size", 48),
         always_on_top=visual_cfg.get("always_on_top", True),
         position=visual_cfg.get("position", "top-left"),
     )

@@ -30,13 +30,16 @@ voice:
   stt_model: "base"           # faster-whisper model: tiny, base, small
   stt_device: "cuda"          # cuda or cpu
   tts_voice: "en-GB-RyanNeural"
-  record_seconds: 5
+  record_seconds: 6
   sample_rate: 16000
-  input_device: default
+  input_device: default       # or "pixel buds" / device index from 'devices'
   output_device: default
+  auto_bluetooth: true        # auto-pick Pixel Buds / hands-free mic
+  min_peak: 0.003              # lower = better for quiet bluetooth mics
+  conversational: true        # after wake: continuous talk like executive assistant
 
 visual:
-  orb_size: 300
+  orb_size: 48                 # small — about Windows taskbar icon size
   always_on_top: true
   position: top-left
 

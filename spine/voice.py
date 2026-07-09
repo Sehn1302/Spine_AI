@@ -48,9 +48,45 @@ def list_audio_devices() -> str:
     return "\n".join(lines)
 
 
-def resolve_device(device: int | str | None, *, kind: str) -> int | None:
-    """Resolve device from index, name substring, or None for system default."""
+def find_bluetooth_device(kind: str, keywords: tuple[str, ...] = ("pixel", "buds", "hands-free", "headset")) -> int | None:
+    """Prefer Bluetooth earbud mic/speaker over laptop defaults."""
+    matches: list[tuple[int, int]] = []
+    for i, dev in enumerate(sd.query_devices()):
+        channels = dev["max_input_channels"] if kind == "input" else dev["max_output_channels"]
+        if channels <= 0:
+            continue
+        name = dev["name"].lower()
+        if not any(kw in name for kw in keywords):
+            continue
+
+        score = 0
+        if "pixel" in name:
+            score += 3
+        if "buds" in name:
+            score += 2
+        if kind == "input":
+            if "hands-free" in name or "headset" in name:
+                score += 5
+        else:
+            if "hands-free" in name or "headset" in name:
+                score -= 2
+            if "stereo" in name or "headphones" in name:
+                score += 3
+        matches.append((score, i))
+
+    if not matches:
+        return None
+    matches.sort(reverse=True)
+    return matches[0][1]
+
+
+def resolve_device(device: int | str | None, *, kind: str, auto_bluetooth: bool = False) -> int | None:
+    """Resolve device from index, name substring, auto-bluetooth, or system default."""
     if device is None or device == "" or device == "default":
+        if auto_bluetooth:
+            bt = find_bluetooth_device(kind)
+            if bt is not None:
+                return bt
         return None
 
     if isinstance(device, int) or (isinstance(device, str) and device.isdigit()):
@@ -75,6 +111,8 @@ class VoiceInterface:
         input_device: int | str | None = None,
         output_device: int | str | None = None,
         sleep_listen_seconds: int = 2,
+        min_peak: float = 0.003,
+        auto_bluetooth: bool = True,
         on_state_change: Callable[[SpineState], None] | None = None,
     ) -> None:
         self.stt_model_name = stt_model
@@ -82,9 +120,10 @@ class VoiceInterface:
         self.tts_voice = tts_voice
         self.record_seconds = record_seconds
         self.sleep_listen_seconds = sleep_listen_seconds
+        self.min_peak = min_peak
         self.sample_rate = sample_rate
-        self.input_device = resolve_device(input_device, kind="input")
-        self.output_device = resolve_device(output_device, kind="output")
+        self.input_device = resolve_device(input_device, kind="input", auto_bluetooth=auto_bluetooth)
+        self.output_device = resolve_device(output_device, kind="output", auto_bluetooth=auto_bluetooth)
         self.on_state_change = on_state_change
         self.state = SpineState.IDLE
         self._whisper: WhisperModel | None = None
@@ -120,9 +159,20 @@ class VoiceInterface:
             )
         return self._whisper
 
-    def _record_wav(self, seconds: int | None = None) -> Path:
+    def _record_wav(
+        self,
+        seconds: int | None = None,
+        *,
+        min_peak: float | None = None,
+        listening_state: bool = True,
+    ) -> Path:
         duration = seconds if seconds is not None else self.record_seconds
-        self._set_state(SpineState.LISTENING)
+        threshold = min_peak if min_peak is not None else self.min_peak
+
+        if listening_state:
+            self._set_state(SpineState.LISTENING)
+        else:
+            self._set_state(SpineState.SLEEPING)
 
         frames = sd.rec(
             int(duration * self.sample_rate),
@@ -135,8 +185,12 @@ class VoiceInterface:
 
         audio = np.squeeze(frames)
         peak = float(np.max(np.abs(audio))) if audio.size else 0.0
-        if peak < 0.01:
+        if peak < threshold:
             raise ValueError("No speech detected.")
+
+        # Normalize quiet Bluetooth mics
+        if peak < 0.15:
+            audio = audio * (0.15 / peak)
 
         temp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         temp_path = Path(temp.name)
@@ -160,7 +214,7 @@ class VoiceInterface:
         print(f"Listening for {self.record_seconds} seconds...")
         wav_path: Path | None = None
         try:
-            wav_path = self._record_wav()
+            wav_path = self._record_wav(listening_state=True)
             text = self._transcribe(wav_path)
 
             if not text:
@@ -180,7 +234,7 @@ class VoiceInterface:
         wav_path: Path | None = None
         try:
             self._set_state(SpineState.SLEEPING)
-            wav_path = self._record_wav(duration)
+            wav_path = self._record_wav(duration, min_peak=self.min_peak * 0.5, listening_state=False)
             return self._transcribe(wav_path)
         except ValueError:
             return ""

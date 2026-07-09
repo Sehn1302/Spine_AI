@@ -1,0 +1,16 @@
+# Spine configuration — edit paths and model as needed
+
+user:
+  title: "Sir"
+
+spine:
+  name: "Spine"
+  model: "qwen2.5:7b"  # Run: ollama pull qwen2.5:7b
+
+paths:
+  memory: "../memory"
+  conversations: "../memory/conversations"
+  logs: "../logs"
+
+chat:
+  max_history_messages: 20  # Recent turns kept in context

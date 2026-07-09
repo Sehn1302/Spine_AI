@@ -187,19 +187,13 @@ Spine: [spoken + text response]
 ### Visual mode (Phase 6)
 
 ```
-run_spine_visual.bat    — Animated orb + voice mode
+run_spine_visual.bat    — Frameless particle orb + voice mode
 ```
 
-Or in text mode, type `visual`.
-
-The orb changes color and pulse by state:
-
-| State | Orb behavior |
-|-------|----------------|
-| Idle | Blue, slow breathe |
-| Listening | Green, expands |
-| Thinking | Amber, fast pulse |
-| Speaking | Cyan, rhythmic pulse |
+- **No window frame** — floating sphere only (drag to move)
+- **Sleeping** — translucent ghost orb
+- **Active** — cyan / magenta / purple particle waves
+- Wake: *"Spine, wake up"* | Sleep: *"Spine, sleep"* or idle timeout
 
 Greetings match the time of day:
 - **5:00–11:59** → *"Good morning, Sir. I am online. How may I assist you?"*

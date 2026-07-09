@@ -36,7 +36,7 @@ voice:
   output_device: default
 
 visual:
-  orb_size: 220
+  orb_size: 300
   always_on_top: true
   position: top-left
 

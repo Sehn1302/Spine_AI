@@ -65,6 +65,7 @@ def main() -> None:
     orb = VisualOrb(
         size=visual_cfg.get("orb_size", 220),
         always_on_top=visual_cfg.get("always_on_top", True),
+        position=visual_cfg.get("position", "top-left"),
     )
 
     if visual_startup:

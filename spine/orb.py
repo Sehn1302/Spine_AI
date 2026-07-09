@@ -38,10 +38,17 @@ STATE_PULSE_SPEED = {
 
 
 class VisualOrb:
-    def __init__(self, size: int = 220, title: str = "Spine", always_on_top: bool = True) -> None:
+    def __init__(
+        self,
+        size: int = 220,
+        title: str = "Spine",
+        always_on_top: bool = True,
+        position: str = "top-left",
+    ) -> None:
         self.size = size
         self.title = title
         self.always_on_top = always_on_top
+        self.position = position
         self.state = SpineState.IDLE
         self.state_queue: queue.Queue[SpineState] = queue.Queue()
         self.pulse_phase = 0.0
@@ -126,7 +133,28 @@ class VisualOrb:
         self.status_label.pack(pady=(4, 0))
 
         self._poll()
+        self.root.update_idletasks()
+        self._place_window()
         self.root.mainloop()
+
+    def _place_window(self) -> None:
+        if not self.root:
+            return
+
+        padding = 16
+        win_w = self.root.winfo_reqwidth()
+        win_h = self.root.winfo_reqheight()
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+
+        positions = {
+            "top-left": (padding, padding),
+            "top-right": (screen_w - win_w - padding, padding),
+            "bottom-left": (padding, screen_h - win_h - padding),
+            "bottom-right": (screen_w - win_w - padding, screen_h - win_h - padding),
+        }
+        x, y = positions.get(self.position, positions["top-left"])
+        self.root.geometry(f"+{x}+{y}")
 
     def stop(self) -> None:
         if self.root:

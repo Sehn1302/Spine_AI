@@ -2,12 +2,59 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 AGENT_COMMANDS = {
     "research": "research",
     "study": "study",
     "files": "files",
     "pc": "pc",
 }
+
+
+def _extract_folder(text: str) -> str | None:
+    match = re.search(r"[A-Za-z]:\\[^\s\"']+", text)
+    if match:
+        return match.group(0).rstrip(".,;")
+
+    lowered = text.lower()
+    home = Path.home()
+    if "downloads" in lowered:
+        return str(home / "Downloads")
+    if "desktop" in lowered:
+        return str(home / "Desktop")
+    if "documents" in lowered:
+        return str(home / "Documents")
+    return None
+
+
+def parse_natural_command(user_input: str) -> tuple[str, str] | None:
+    """Map spoken/plain requests to agent commands."""
+    lowered = user_input.lower().strip()
+
+    if lowered.startswith("launch "):
+        return "pc", f"launch {user_input[7:].strip()}"
+
+    if lowered.startswith("open "):
+        return "pc", f"open {user_input[5:].strip()}"
+
+    if "write" in lowered and ("word" in lowered or "document" in lowered or "file" in lowered):
+        return None
+
+    if "remove duplicate" in lowered or "delete duplicate" in lowered:
+        folder = _extract_folder(user_input) or str(Path.home() / "Downloads")
+        return "pc", f"duplicates {folder}"
+
+    if "organize" in lowered and ("file" in lowered or "folder" in lowered):
+        folder = _extract_folder(user_input) or str(Path.home() / "Downloads")
+        return "pc", f"organize {folder}"
+
+    if "cleanup" in lowered or "clean up" in lowered or "clear up space" in lowered:
+        folder = _extract_folder(user_input) or str(Path.home() / "Downloads")
+        return "pc", f"cleanup {folder}"
+
+    return None
 
 
 def parse_agent_command(user_input: str) -> tuple[str, str] | None:
@@ -21,7 +68,7 @@ def parse_agent_command(user_input: str) -> tuple[str, str] | None:
             if task:
                 return agent_name, task
 
-    return None
+    return parse_natural_command(user_input)
 
 
 def list_agents() -> str:
@@ -29,11 +76,20 @@ def list_agents() -> str:
         "Available agents:\n"
         "  research <query>   — Web search and summary\n"
         "  study <query>      — Thesis and academic guidance\n"
-        "  files <path>       — Folder scan and organization advice (read-only)\n"
-        "  pc <command>       — Controlled PC tools (open, processes, organize)\n"
+        "  files <path>       — Folder scan (read-only advice)\n"
+        "  pc <command>       — Apps, documents, folder control\n"
         "\n"
-        "PC sub-commands:\n"
-        "  pc open <app|path>     — Open application or file\n"
-        "  pc processes           — List running processes\n"
-        "  pc organize <folder>   — Plan organization (then type confirm/cancel)"
+        "PC commands:\n"
+        "  pc launch <app>          — Launch Minecraft, Chrome, Word, etc.\n"
+        "  pc write <path> <text>   — Create .txt or .docx file\n"
+        "  pc organize <folder>     — Sort files by type\n"
+        "  pc duplicates <folder>   — Remove duplicate files\n"
+        "  pc cleanup <folder>      — Organize + remove duplicates\n"
+        "\n"
+        "Natural voice/text also works:\n"
+        "  launch minecraft\n"
+        "  organize files in Downloads\n"
+        "  remove duplicates in Downloads\n"
+        "  clear up space in Downloads\n"
+        "Then type confirm or cancel."
     )

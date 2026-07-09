@@ -30,11 +30,12 @@ voice:
   stt_model: "base"           # faster-whisper model: tiny, base, small
   stt_device: "cuda"          # cuda or cpu
   tts_voice: "en-GB-RyanNeural"
-    record_seconds: 5
+  record_seconds: 5
   sample_rate: 16000
-  input_device: default   # default, or device index / name substring
-  output_device: default  # default, or device index / name substring
+  input_device: default
+  output_device: default
 
 visual:
   orb_size: 220
   always_on_top: true
+  position: top-left

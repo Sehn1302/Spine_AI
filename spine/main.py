@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 from greeting import time_farewell, time_greeting
+from boot import ensure_single_instance, release_instance_lock, setup_boot_logging
 from orchestrator import SpineOrchestrator, load_config
 from orb import VisualOrb
 from router import list_agents
@@ -47,14 +48,28 @@ def main() -> None:
     if not boot_startup:
         print(BANNER)
 
+    if boot_startup:
+        config = load_config()
+        setup_boot_logging(config["paths"]["logs"])
+        if not ensure_single_instance():
+            sys.exit(0)
+
     try:
         spine = SpineOrchestrator(quiet=boot_startup)
     except Exception as exc:
-        print(f"Failed to initialize Spine: {exc}")
+        if boot_startup:
+            import logging
+            logging.exception("Failed to initialize Spine: %s", exc)
+        else:
+            print(f"Failed to initialize Spine: {exc}")
+        release_instance_lock()
         sys.exit(1)
 
     title = spine.user_title
-    config = load_config()
+    if not boot_startup:
+        config = load_config()
+    else:
+        config = spine.config
     voice_cfg = config.get("voice", {})
     visual_cfg = config.get("visual", {})
     wake_cfg = config.get("wake", {})
@@ -79,6 +94,7 @@ def main() -> None:
         silence_stop_seconds=voice_cfg.get("silence_stop_seconds", 1.0),
         max_utterance_seconds=voice_cfg.get("max_utterance_seconds", 25.0),
         conversation_min_peak=voice_cfg.get("conversation_min_peak", 0.003),
+        boot_use_default_mic=voice_cfg.get("boot_use_default_mic", True),
     )
 
     wake_kwargs = {
@@ -96,7 +112,10 @@ def main() -> None:
 
     if visual_startup:
         wake_kwargs["start_awake"] = False
-        run_visual_mode(spine, voice, orb, wake_kwargs=wake_kwargs)
+        try:
+            run_visual_mode(spine, voice, orb, wake_kwargs=wake_kwargs, boot_mode=boot_startup)
+        finally:
+            release_instance_lock()
         return
 
     if voice_startup:

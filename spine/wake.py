@@ -23,13 +23,15 @@ def _normalize(text: str) -> str:
 
 
 def is_wake_phrase(text: str, phrases: tuple[str, ...] | None = None) -> bool:
-    """Only wake on explicit 'Spine wake up' — ignores other speech."""
+    """Wake on 'Spine wake up' and close Whisper mis-hearings."""
     active = phrases or DEFAULT_WAKE_PHRASES
     normalized = _normalize(text)
     for phrase in active:
         if _normalize(phrase.replace(",", "")) in normalized:
             return True
-    return False
+    # Common mis-transcriptions
+    wake_hints = ("spine wake", "spain wake", "spine wakeup", "spine wake up", "spine wikipedia")
+    return any(hint in normalized for hint in wake_hints)
 
 
 def is_sleep_phrase(text: str, phrases: tuple[str, ...] = DEFAULT_SLEEP_PHRASES) -> bool:

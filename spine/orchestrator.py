@@ -41,16 +41,25 @@ def load_config() -> dict[str, Any]:
     return raw
 
 
-def setup_logging(logs_dir: str) -> None:
+def setup_logging(logs_dir: str, *, quiet: bool = False) -> None:
     Path(logs_dir).mkdir(parents=True, exist_ok=True)
     log_file = Path(logs_dir) / f"spine_{datetime.now().strftime('%Y%m%d')}.log"
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+
+    if logging.getLogger().handlers:
+        handler = logging.FileHandler(log_file, encoding="utf-8")
+        handler.setFormatter(fmt)
+        logging.getLogger().addHandler(handler)
+        return
+
+    handlers: list[logging.Handler] = [logging.FileHandler(log_file, encoding="utf-8")]
+    if not quiet:
+        handlers.append(logging.StreamHandler())
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file, encoding="utf-8"),
-            logging.StreamHandler(),
-        ],
+        handlers=handlers,
+        force=True,
     )
 
 
@@ -58,7 +67,7 @@ class SpineOrchestrator:
     def __init__(self, config: dict[str, Any] | None = None, *, quiet: bool = False) -> None:
         self.config = config or load_config()
         self.quiet = quiet
-        setup_logging(self.config["paths"]["logs"])
+        setup_logging(self.config["paths"]["logs"], quiet=quiet)
         self.action_log = ActionLog(self.config["paths"]["logs"])
 
         self.user_title = self.config["user"]["title"]

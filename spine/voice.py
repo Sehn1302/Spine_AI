@@ -308,6 +308,7 @@ class VoiceInterface:
         silence_stop_seconds: float = 1.0,
         max_utterance_seconds: float = 25.0,
         conversation_min_peak: float = 0.003,
+        boot_use_default_mic: bool = True,
         on_state_change: Callable[[SpineState], None] | None = None,
     ) -> None:
         self.stt_model_name = stt_model
@@ -318,6 +319,7 @@ class VoiceInterface:
         self.min_peak = min_peak
         self.passive_min_peak = passive_min_peak
         self.conversation_min_peak = conversation_min_peak
+        self.boot_use_default_mic = boot_use_default_mic
         self.listen_mode = listen_mode
         self.silence_stop_seconds = silence_stop_seconds
         self.max_utterance_seconds = max_utterance_seconds
@@ -339,7 +341,9 @@ class VoiceInterface:
             self._input_pref,
             self._output_pref,
             auto_bluetooth=self.auto_bluetooth,
-            prefer_enhanced_audio=self.prefer_enhanced_audio,
+            prefer_enhanced_audio=self.prefer_enhanced_audio
+            if not (self.boot_use_default_mic and self._input_pref in (None, "", "default"))
+            else False,
         )
         if prev_in != self.input_device or prev_out != self.output_device:
             self._log_active_devices(verbose=True)
@@ -348,11 +352,19 @@ class VoiceInterface:
         """Re-scan for newly connected Bluetooth / wireless audio devices."""
         prev_in = self.input_device
         prev_out = self.output_device
+
+        input_pref = self._input_pref
+        output_pref = self._output_pref
+        prefer_enhanced = self.prefer_enhanced_audio
+
+        if self.boot_use_default_mic and input_pref in (None, "", "default"):
+            prefer_enhanced = False
+
         self.input_device, self.output_device = resolve_audio_pair(
-            self._input_pref,
-            self._output_pref,
+            input_pref,
+            output_pref,
             auto_bluetooth=self.auto_bluetooth,
-            prefer_enhanced_audio=self.prefer_enhanced_audio,
+            prefer_enhanced_audio=prefer_enhanced,
         )
         if prev_in != self.input_device or prev_out != self.output_device:
             print("Audio devices updated:")

@@ -42,7 +42,8 @@ voice:
   max_utterance_seconds: 25   # max length per phrase
   conversation_min_peak: 0.003 # sensitive mic pickup while awake
   min_peak: 0.004              # fallback for fixed-length mode
-  passive_min_peak: 0.008       # threshold while sleeping (wake phrase only)
+  passive_min_peak: 0.005       # wake phrase sensitivity
+  boot_use_default_mic: true    # after reboot use Windows default mic first
   conversational: true        # after wake: continuous talk like executive assistant
 
 visual:

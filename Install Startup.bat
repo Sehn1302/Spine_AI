@@ -1,15 +1,13 @@
 @echo off
 title Install Spine Startup
-call "%~dp0_common.bat"
+cd /d "%~dp0"
+call "%~dp0Scripts\_common.bat"
 
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
 set "VBS=%STARTUP%\Spine_AI_Startup.vbs"
-set "OLD=%STARTUP%\Spine_AI_Startup.bat"
-
-if exist "%OLD%" del "%OLD%"
 
 (
-echo ' Spine AI — hidden startup
+echo ' Spine — start on Windows login
 echo Set WshShell = CreateObject^("WScript.Shell"^)
 echo root = "%ROOT%"
 echo WshShell.CurrentDirectory = root
@@ -20,13 +18,11 @@ echo     WshShell.Run """""" ^& ollama ^& """""", 0, False
 echo End If
 echo py = root ^& "\.venv\Scripts\pythonw.exe"
 echo main = root ^& "\spine\main.py"
-echo WshShell.Run """""" ^& py ^& """ """ ^& main ^& """ --visual --startup", 0, False
+echo WshShell.Run """""" ^& py ^& """ """ ^& main ^& """ --visual", 0, False
 ) > "%VBS%"
 
 echo.
-echo Spine startup installed — silent, no command windows.
-echo   Orb appears ~30s after login. Say "Spine, wake up".
-echo.
+echo Spine will start automatically when you log in.
 echo   %VBS%
 echo.
 pause

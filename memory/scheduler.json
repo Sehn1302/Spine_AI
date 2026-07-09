@@ -1,0 +1,17 @@
+[
+  {
+    "id": "morning_index",
+    "time": "08:00",
+    "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri",
+      "sat",
+      "sun"
+    ],
+    "command": "index",
+    "enabled": true
+  }
+]

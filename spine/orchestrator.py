@@ -22,7 +22,7 @@ from host_capabilities import HostCapabilities
 from knowledge import KnowledgeBase
 from model_manager import ModelManager
 from persona import build_system_prompt
-from router import list_agents, parse_agent_command
+from scheduler import TaskScheduler, handle_schedule_command
 
 
 def load_config() -> dict[str, Any]:
@@ -74,7 +74,8 @@ class SpineOrchestrator:
         self.action_log = ActionLog(self.config["paths"]["logs"])
 
         self.user_title = self.config["user"]["title"]
-        self.model = self.config["spine"]["model"]
+        self.models = ModelManager(self.config)
+        self.model = self.models.model_for_role("chat")
         self.spine_name = self.config["spine"]["name"]
         self.max_history = self.config["chat"]["max_history_messages"]
 
@@ -98,27 +99,76 @@ class SpineOrchestrator:
             top_k=knowledge_cfg.get("top_k", 4),
         )
 
-        logging.info("Spine online — session %s, model %s", self.session_id, self.model)
+        logging.info("Spine online — session %s, chat model %s", self.session_id, self.model)
         logging.info("Knowledge base ready — %d indexed chunks", self.knowledge.document_count)
+        logging.info("%s", self.models.routing_report().replace("\n", " | "))
+
+        if knowledge_cfg.get("auto_index_on_startup", False):
+            try:
+                stats = self.knowledge.index_all()
+                logging.info(
+                    "Auto-indexed knowledge: %d new, %d chunks total",
+                    stats.get("indexed", 0),
+                    stats.get("total_chunks", 0),
+                )
+            except Exception as exc:
+                logging.warning("Auto-index skipped: %s", exc)
 
         host_cfg = self.config.get("host", {})
         self.host_caps = HostCapabilities(
             cache_path=host_cfg.get("cache_path"),
             rescan_hours=host_cfg.get("rescan_hours", 24),
         )
-        if host_cfg.get("scan_on_startup", True):
+        if host_cfg.get("scan_on_startup", False):
             self.host_caps.load_or_scan()
             if not self.quiet:
                 print(self.host_caps.format_report())
                 print()
 
+        pc_cfg = self.config.get("pc", {})
+        self._init_agents(pc_cfg)
+        self.scheduler: TaskScheduler | None = None
+        sched_cfg = self.config.get("scheduler", {})
+        if sched_cfg.get("enabled", True):
+            self.scheduler = TaskScheduler(
+                self._run_scheduled_command,
+                interval=sched_cfg.get("check_interval_seconds", 60),
+            )
+            self.scheduler.start()
+
+    def _init_agents(self, pc_cfg: dict) -> None:
+        m = self.models
         self.agents = {
-            "research": ResearchAgent(self.model, self.user_title),
-            "study": StudyAgent(self.model, self.user_title),
-            "files": FilesAgent(self.model, self.user_title),
-            "pc": PcAgent(self.model, self.user_title, action_log=self.action_log, host_caps=self.host_caps),
+            "research": ResearchAgent(m.model_for_role("research"), self.user_title),
+            "study": StudyAgent(m.model_for_role("study"), self.user_title),
+            "files": FilesAgent(m.model_for_role("files"), self.user_title),
+            "pc": PcAgent(
+                m.model_for_role("planner"),
+                self.user_title,
+                action_log=self.action_log,
+                host_caps=self.host_caps,
+                unrestricted=pc_cfg.get("unrestricted", True),
+            ),
         }
+
+    def _run_scheduled_command(self, command: str) -> str:
+        logging.info("Scheduled command: %s", command)
+        if command == "index":
+            return self.index_knowledge()
+        return self.handle(command)
+
+    def sync_agent_models(self) -> None:
+        self.config = load_config()
         self.models = ModelManager(self.config)
+        self.model = self.models.model_for_role("chat")
+        pc_cfg = self.config.get("pc", {})
+        if not hasattr(self, "host_caps"):
+            host_cfg = self.config.get("host", {})
+            self.host_caps = HostCapabilities(
+                cache_path=host_cfg.get("cache_path"),
+                rescan_hours=host_cfg.get("rescan_hours", 24),
+            )
+        self._init_agents(pc_cfg)
 
     def _load_latest_session(self) -> None:
         sessions = sorted(self.conversations_dir.glob("session_*.json"))
@@ -274,10 +324,7 @@ class SpineOrchestrator:
     def handle_models(self, task: str) -> str:
         reply = self.models.handle(task)
         if task.strip().lower().startswith(("use ", "set ", "switch ")):
-            self.config = load_config()
-            self.model = self.config["spine"]["model"]
-            for agent in self.agents.values():
-                agent.model = self.model
+            self.sync_agent_models()
         self.messages.append({"role": "user", "content": f"[models] {task}"})
         self.messages.append({"role": "assistant", "content": reply})
         self._save_session()
@@ -294,10 +341,40 @@ class SpineOrchestrator:
             task = user_input[6:].strip() if lowered.startswith("models ") else "list"
             return self.handle_models(task)
 
+        if lowered == "schedule" or lowered.startswith("schedule "):
+            task = user_input[9:].strip() if lowered.startswith("schedule ") else "list"
+            reply = handle_schedule_command(task)
+            self.messages.append({"role": "user", "content": f"[schedule] {task}"})
+            self.messages.append({"role": "assistant", "content": reply})
+            self._save_session()
+            return reply
+
+        if lowered in {"index", "reindex"}:
+            return self.index_knowledge()
+
         route = parse_agent_command(user_input)
         if route:
             agent_name, task = route
+            if agent_name == "remember":
+                reply = self.remember(task)
+                self.messages.append({"role": "user", "content": user_input})
+                self.messages.append({"role": "assistant", "content": reply})
+                self._save_session()
+                return reply
+            if agent_name == "models":
+                return self.handle_models(task)
+            if agent_name == "schedule":
+                reply = handle_schedule_command(task)
+                self.messages.append({"role": "user", "content": f"[schedule] {task}"})
+                self.messages.append({"role": "assistant", "content": reply})
+                self._save_session()
+                return reply
             return self.delegate(agent_name, task)
+
+        pc_cfg = self.config.get("pc", {})
+        if pc_cfg.get("auto_control", True) and wants_pc_control(user_input):
+            return self.delegate("pc", f"do {user_input}")
+
         return self.chat(user_input)
 
     def new_session(self) -> None:

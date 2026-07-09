@@ -1,12 +1,8 @@
-"""Wake word and sleep phrase detection."""
+"""Wake word, sleep phrases, and 'Spine <command>' parsing."""
 
 from __future__ import annotations
 
-DEFAULT_WAKE_PHRASES = (
-    "spine wake up",
-    "spine wakeup",
-    "spine, wake up",
-)
+PREFIX_ALIASES = ("spine", "spain", "spike")
 
 DEFAULT_SLEEP_PHRASES = (
     "spine sleep",
@@ -22,16 +18,33 @@ def _normalize(text: str) -> str:
     return "".join(ch for ch in text.lower() if ch.isalnum() or ch.isspace()).strip()
 
 
-def is_wake_phrase(text: str, phrases: tuple[str, ...] | None = None) -> bool:
-    """Wake on 'Spine wake up' and close Whisper mis-hearings."""
-    active = phrases or DEFAULT_WAKE_PHRASES
+def parse_spine_command(text: str, prefix: str = "spine") -> str | None:
+    """
+    Extract command after 'Spine' prefix.
+    'Spine launch minecraft' -> 'launch minecraft'
+    Returns None if speech does not start with Spine (ignored).
+    Returns '' if user only said 'Spine'.
+    """
+    if not text or not text.strip():
+        return None
+
     normalized = _normalize(text)
-    for phrase in active:
-        if _normalize(phrase.replace(",", "")) in normalized:
-            return True
-    # Common mis-transcriptions
-    wake_hints = ("spine wake", "spain wake", "spine wakeup", "spine wake up", "spine wikipedia")
-    return any(hint in normalized for hint in wake_hints)
+    for alias in PREFIX_ALIASES:
+        if normalized == alias:
+            return ""
+        if normalized.startswith(alias + " "):
+            # Find where the command starts in original text (after prefix word)
+            lowered = text.lower().lstrip()
+            for sep in (alias + ",", alias + " "):
+                if lowered.startswith(sep):
+                    return text[len(sep) :].strip()
+            if lowered.startswith(alias):
+                return text[len(alias) :].strip().lstrip(",").strip()
+    return None
+
+
+def is_spine_invocation(text: str) -> bool:
+    return parse_spine_command(text) is not None
 
 
 def is_sleep_phrase(text: str, phrases: tuple[str, ...] = DEFAULT_SLEEP_PHRASES) -> bool:
@@ -39,9 +52,5 @@ def is_sleep_phrase(text: str, phrases: tuple[str, ...] = DEFAULT_SLEEP_PHRASES)
     return any(p in normalized for p in phrases)
 
 
-def wake_response(title: str = "Sir") -> str:
-    return f"Awake and ready, {title}. How may I assist you?"
-
-
 def sleep_response(title: str = "Sir") -> str:
-    return f"Going silent, {title}. Say 'Spine, wake up' when you need me."
+    return f"Going silent, {title}. Say 'Spine' followed by your command when you need me."

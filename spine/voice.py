@@ -13,6 +13,10 @@ from typing import Callable
 import edge_tts
 import numpy as np
 import sounddevice as sd
+
+from cuda_paths import ensure_cuda_dll_path
+
+ensure_cuda_dll_path()
 from faster_whisper import WhisperModel
 
 from host_capabilities import find_enhanced_audio_device
@@ -164,6 +168,11 @@ def _device_base_name(name: str) -> str:
     return lowered
 
 
+def _is_hands_free_profile(name: str) -> bool:
+    lowered = name.lower()
+    return "hands-free" in lowered or "hfp" in lowered or "ag audio" in lowered
+
+
 def _score_wireless_device(name: str, *, kind: str) -> int | None:
     """Score wireless endpoints; higher is better. None = not a wireless candidate."""
     lowered = name.lower()
@@ -177,15 +186,18 @@ def _score_wireless_device(name: str, *, kind: str) -> int | None:
         score += 2
 
     if kind == "input":
-        if "hands-free" in lowered or "headset" in lowered or "hfp" in lowered or "ag audio" in lowered:
-            score += 8
-        if "stereo" in lowered and "hands-free" not in lowered:
-            score -= 4
+        # Stereo / A2DP mics transcribe far better than HFP hands-free.
+        if "stereo" in lowered and not _is_hands_free_profile(lowered):
+            score += 10
+        if "headphones" in lowered and not _is_hands_free_profile(lowered):
+            score += 6
+        if _is_hands_free_profile(lowered):
+            score -= 6
     else:
         if "stereo" in lowered or "a2dp" in lowered or "headphones" in lowered:
-            score += 6
-        if "hands-free" in lowered or "headset" in lowered:
-            score += 1
+            score += 8
+        if _is_hands_free_profile(lowered):
+            score -= 8
 
     return score
 
@@ -215,6 +227,42 @@ def find_wireless_device(kind: str, *, match_name: str | None = None) -> int | N
         return None
     matches.sort(reverse=True)
     return matches[0][1]
+
+
+def _default_device_index(kind: str) -> int:
+    return sd.default.device[0 if kind == "input" else 1]
+
+
+def _pick_non_hands_free_default(kind: str) -> int | None:
+    """Prefer PC speakers / laptop mic over Bluetooth HFP profiles."""
+    default_idx = _default_device_index(kind)
+    try:
+        default_name = sd.query_devices(default_idx)["name"]
+        if not _is_hands_free_profile(default_name):
+            return default_idx
+    except Exception:
+        pass
+
+    best: tuple[int, int] | None = None
+    for i, dev in enumerate(sd.query_devices()):
+        channels = dev["max_input_channels"] if kind == "input" else dev["max_output_channels"]
+        if channels <= 0:
+            continue
+        name = dev["name"]
+        if _is_hands_free_profile(name):
+            continue
+        score = 0
+        if _is_builtin_device(name):
+            score += 5
+        if kind == "output" and ("speaker" in name.lower() or "realtek" in name.lower()):
+            score += 4
+        if kind == "input" and ("microphone array" in name.lower() or "realtek" in name.lower()):
+            score += 4
+        if _is_wireless_device(name) and not _is_hands_free_profile(name):
+            score += 3
+        if best is None or score > best[0]:
+            best = (score, i)
+    return best[1] if best else default_idx
 
 
 def resolve_device(
@@ -285,6 +333,24 @@ def resolve_audio_pair(
     if input_device is None and auto_bluetooth and not explicit_input:
         input_device = find_wireless_device("input")
 
+    if output_device is not None:
+        try:
+            if _is_hands_free_profile(sd.query_devices(output_device)["name"]):
+                output_device = _pick_non_hands_free_default("output")
+        except Exception:
+            output_device = _pick_non_hands_free_default("output")
+
+    if input_device is not None:
+        try:
+            if _is_hands_free_profile(sd.query_devices(input_device)["name"]):
+                alt = find_enhanced_audio_device("input") if prefer_enhanced_audio else None
+                if alt is None:
+                    alt = _pick_non_hands_free_default("input")
+                if alt is not None:
+                    input_device = alt
+        except Exception:
+            pass
+
     return input_device, output_device
 
 
@@ -337,6 +403,14 @@ class VoiceInterface:
     def _apply_devices(self) -> None:
         prev_in = getattr(self, "input_device", None)
         prev_out = getattr(self, "output_device", None)
+
+        if self.boot_use_default_mic and self._input_pref in (None, "", "default"):
+            self.input_device = _pick_non_hands_free_default("input")
+            self.output_device = _pick_non_hands_free_default("output")
+            if prev_in != self.input_device or prev_out != self.output_device:
+                self._log_active_devices(verbose=True)
+            return
+
         self.input_device, self.output_device = resolve_audio_pair(
             self._input_pref,
             self._output_pref,
@@ -358,7 +432,15 @@ class VoiceInterface:
         prefer_enhanced = self.prefer_enhanced_audio
 
         if self.boot_use_default_mic and input_pref in (None, "", "default"):
-            prefer_enhanced = False
+            # Use Windows default unless it is low-quality BT hands-free.
+            default_in = _pick_non_hands_free_default("input")
+            default_out = _pick_non_hands_free_default("output")
+            self.input_device = default_in
+            self.output_device = default_out
+            if prev_in != self.input_device or prev_out != self.output_device:
+                print("Audio devices updated:")
+                self._log_active_devices(verbose=True)
+            return
 
         self.input_device, self.output_device = resolve_audio_pair(
             input_pref,
@@ -392,16 +474,37 @@ class VoiceInterface:
         if self.on_state_change:
             self.on_state_change(state)
 
+    def _load_whisper(self, device: str) -> WhisperModel:
+        ensure_cuda_dll_path()
+        compute_type = "float16" if device == "cuda" else "int8"
+        logging.info("Loading Whisper model '%s' on %s", self.stt_model_name, device)
+        return WhisperModel(
+            self.stt_model_name,
+            device=device,
+            compute_type=compute_type,
+        )
+
     def _get_whisper(self) -> WhisperModel:
         if self._whisper is None:
-            compute_type = "float16" if self.stt_device == "cuda" else "int8"
-            logging.info("Loading Whisper model '%s' on %s", self.stt_model_name, self.stt_device)
-            self._whisper = WhisperModel(
-                self.stt_model_name,
-                device=self.stt_device,
-                compute_type=compute_type,
-            )
+            try:
+                self._whisper = self._load_whisper(self.stt_device)
+            except Exception as exc:
+                if self.stt_device != "cpu":
+                    logging.warning("Whisper CUDA failed (%s) — using CPU.", exc)
+                    self.stt_device = "cpu"
+                    self._whisper = self._load_whisper("cpu")
+                else:
+                    raise
         return self._whisper
+
+    def _cuda_whisper_broken(self, exc: BaseException) -> bool:
+        msg = str(exc).lower()
+        return "cublas" in msg or "cuda" in msg or "cudnn" in msg
+
+    def _fallback_whisper_cpu(self) -> None:
+        logging.warning("Switching speech recognition to CPU (CUDA libraries missing).")
+        self.stt_device = "cpu"
+        self._whisper = None
 
     def _record_wav(
         self,
@@ -524,44 +627,55 @@ class VoiceInterface:
                     pre_roll.pop(0)
 
         if not buffers:
+            logging.info("No speech detected in %.0fs window (mic peak threshold %.4f)", max_seconds, speech_threshold)
             raise ValueError("No speech detected.")
 
-        return np.concatenate(buffers)
+        audio = np.concatenate(buffers)
+        peak = float(np.max(np.abs(audio))) if audio.size else 0.0
+        logging.info("Captured %.2fs audio, peak %.4f", len(audio) / self.sample_rate, peak)
+        return audio
 
     def _transcribe(self, wav_path: Path) -> str:
-        model = self._get_whisper()
-        kwargs: dict = {"beam_size": 5, "language": "en"}
-        if self.noise_cancellation:
-            kwargs["vad_filter"] = True
-            kwargs["vad_parameters"] = {
-                "min_silence_duration_ms": 300,
-                "speech_pad_ms": 300,
-                "threshold": 0.35,
-            }
-        segments, _ = model.transcribe(str(wav_path), **kwargs)
-        return " ".join(segment.text.strip() for segment in segments).strip()
+        kwargs: dict = {
+            "beam_size": 5,
+            "language": "en",
+            "vad_filter": False,
+        }
+        try:
+            model = self._get_whisper()
+            segments, info = model.transcribe(str(wav_path), **kwargs)
+        except RuntimeError as exc:
+            if self.stt_device != "cpu" and self._cuda_whisper_broken(exc):
+                self._fallback_whisper_cpu()
+                model = self._get_whisper()
+                segments, info = model.transcribe(str(wav_path), **kwargs)
+            else:
+                raise
+        text = " ".join(segment.text.strip() for segment in segments).strip()
+        if not text:
+            logging.info(
+                "Transcription empty (duration %.2fs, language_prob %.2f)",
+                getattr(info, "duration", 0.0),
+                getattr(info, "language_probability", 0.0),
+            )
+        return text
+
+    def _maybe_refresh_devices(self) -> None:
+        """Re-scan audio only when wireless auto-pick is enabled."""
+        if self.auto_bluetooth:
+            self.refresh_devices()
 
     def listen(self) -> str:
-        """Listen like Copilot — continuous until you stop speaking."""
-        self.refresh_devices()
+        """Record fixed window, transcribe, return text."""
         wav_path: Path | None = None
         try:
-            if self.listen_mode == "continuous":
-                audio = self._record_until_silence(
-                    speech_threshold=self.conversation_min_peak,
-                    silence_seconds=self.silence_stop_seconds,
-                    max_seconds=self.max_utterance_seconds,
-                )
-                if self.noise_cancellation:
-                    audio = _trim_to_speech(audio, self.sample_rate, threshold=self.conversation_min_peak * 0.5)
-                wav_path = self._audio_to_wav(audio)
-            else:
-                print(f"Listening for {self.record_seconds} seconds...")
-                wav_path = self._record_wav(listening_state=True)
-
+            logging.info("Listening for %ds...", self.record_seconds)
+            print(f"Listening ({self.record_seconds}s)...")
+            wav_path = self._record_wav(listening_state=True, min_peak=self.min_peak)
             text = self._transcribe(wav_path)
             if not text:
-                raise ValueError("Could not understand speech. Please try again.")
+                raise ValueError("Could not understand speech.")
+            logging.info('Heard: "%s"', text)
             print(f'Heard: "{text}"')
             return text
         finally:
@@ -572,7 +686,7 @@ class VoiceInterface:
 
     def listen_passive(self, seconds: int | None = None) -> str:
         """Short listen for wake phrase — ignores background noise."""
-        self.refresh_devices()
+        self._maybe_refresh_devices()
         duration = seconds if seconds is not None else self.sleep_listen_seconds
         wav_path: Path | None = None
         try:
@@ -605,7 +719,7 @@ class VoiceInterface:
         if not text.strip():
             return
 
-        self.refresh_devices()
+        self._maybe_refresh_devices()
         self._set_state(SpineState.SPEAKING)
         temp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
         audio_path = Path(temp.name)

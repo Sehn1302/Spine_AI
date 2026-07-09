@@ -1,11 +1,22 @@
-# Spine configuration — edit paths and model as needed
+# Spine — local voice assistant + multi-LLM brain
 
 user:
   title: "Sir"
 
 spine:
   name: "Spine"
-  model: "qwen2.5:7b"  # Run: ollama pull qwen2.5:7b
+  model: "qwen2.5:7b"
+
+models:
+  primary: "qwen2.5:7b"
+  fast: "phi3:mini"
+  routing:
+    chat: primary
+    pc: fast
+    research: primary
+    study: primary
+    planner: fast
+    files: fast
 
 paths:
   memory: "memory"
@@ -15,53 +26,38 @@ paths:
   logs: "logs"
 
 chat:
-  max_history_messages: 20  # Recent turns kept in context
+  max_history_messages: 20
 
 knowledge:
-  embed_model: "nomic-embed-text"  # Run: ollama pull nomic-embed-text
+  embed_model: "nomic-embed-text"
   chunk_size: 800
   chunk_overlap: 100
   top_k: 4
-
-pc:
-  max_organize_files: 100
+  auto_index_on_startup: true
 
 voice:
-  stt_model: "base"           # faster-whisper model: tiny, base, small
-  stt_device: "cuda"          # cuda or cpu
+  stt_model: "tiny"
+  stt_device: "cuda"
   tts_voice: "en-GB-RyanNeural"
-  record_seconds: 6
+  record_seconds: 7
   sample_rate: 16000
-  input_device: default       # or device name / index from 'devices'
-  output_device: default
-  auto_bluetooth: true        # auto-use any connected Bluetooth / wireless headset
-  prefer_enhanced_audio: true # use noise-cancelling mics (Armoury Crate, NVIDIA Broadcast, etc.)
-  noise_cancellation: true    # software VAD — filters noise, keeps your voice
-  listen_mode: continuous    # copilot-style: listens until you stop speaking
-  silence_stop_seconds: 1.0   # stop after this many seconds of silence
-  max_utterance_seconds: 25   # max length per phrase
-  conversation_min_peak: 0.003 # sensitive mic pickup while awake
-  min_peak: 0.004              # fallback for fixed-length mode
-  passive_min_peak: 0.005       # wake phrase sensitivity
-  boot_use_default_mic: true    # after reboot use Windows default mic first
-  conversational: true        # after wake: continuous talk like executive assistant
+  listen_mode: fixed
+  min_peak: 0.0008
 
 visual:
-  orb_size: 48                 # small — about Windows taskbar icon size
+  orb_size: 48
   always_on_top: true
   position: top-left
+  tray_icon: true
 
-wake:
+pc:
+  unrestricted: true
+  auto_control: true
+  screen_control: true
+
+scheduler:
   enabled: true
-  start_asleep: true          # silent until "Spine, wake up"
-  sleep_timeout_seconds: 90   # auto-sleep after idle
-  sleep_listen_seconds: 3     # short listens while sleeping
-  phrases:                    # ONLY these phrases wake Spine
-    - "spine wake up"
-    - "spine wakeup"
-    - "spine, wake up"
+  check_interval_seconds: 60
 
 host:
-  scan_on_startup: true       # detect installed software on this PC
-  cache_path: "memory/host_capabilities.json"
-  rescan_hours: 24            # re-scan after this many hours
+  scan_on_startup: false

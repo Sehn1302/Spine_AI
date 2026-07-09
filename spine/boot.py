@@ -92,6 +92,46 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
+def ensure_gpu_env() -> None:
+    """Ensure Ollama and CUDA libraries can use the GPU."""
+    os.environ.pop("OLLAMA_NO_GPU", None)
+    os.environ.setdefault("OLLAMA_NUM_GPU", "1")
+
+
+def log_gpu_status() -> None:
+    """Log CUDA / Ollama processor info for boot diagnostics."""
+    ensure_gpu_env()
+    try:
+        import ctranslate2
+
+        count = ctranslate2.get_cuda_device_count()
+        logging.info("CUDA devices available (Whisper): %d", count)
+    except Exception as exc:
+        logging.warning("CUDA check failed: %s", exc)
+
+    logging.info(
+        "Ollama env — OLLAMA_NO_GPU=%r, OLLAMA_NUM_GPU=%r",
+        os.environ.get("OLLAMA_NO_GPU", ""),
+        os.environ.get("OLLAMA_NUM_GPU", ""),
+    )
+
+    try:
+        result = subprocess.run(
+            ["ollama", "ps"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            for line in result.stdout.strip().splitlines():
+                logging.info("Ollama: %s", line.strip())
+        else:
+            logging.info("Ollama: no models loaded yet (GPU activates when you ask Spine something)")
+    except Exception as exc:
+        logging.debug("Ollama ps skipped: %s", exc)
+
+
 def start_ollama_app() -> None:
     """Launch Ollama tray app if installed (starts the server on Windows)."""
     candidates = [
@@ -101,10 +141,14 @@ def start_ollama_app() -> None:
     for path in candidates:
         if path.exists():
             try:
+                env = os.environ.copy()
+                env.pop("OLLAMA_NO_GPU", None)
+                env.setdefault("OLLAMA_NUM_GPU", "1")
                 subprocess.Popen(
                     [str(path)],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    env=env,
                     creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
                 )
                 logging.info("Started Ollama: %s", path)

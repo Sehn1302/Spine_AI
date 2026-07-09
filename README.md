@@ -1,67 +1,52 @@
-# Spine AI
+﻿# Spine AI
 
-Your personal AI assistant — installs like a game, runs entirely on your PC.
+Local voice-to-voice assistant with a **multi-LLM brain** — runs entirely on your PC.
 
-> **Purchase:** [Portfolio & licensing](portfolio/) — available from the creator's site.
+## Quick start
 
-## Quick Start (3 steps)
+1. Install [Ollama](https://ollama.com/download)
+2. Pull brains: `ollama pull qwen2.5:7b` and `ollama pull phi3:mini`
+3. Double-click **`Launch Spine.bat`**
 
-1. **Install [Ollama](https://ollama.com/download)** (Spine's brain)
-2. **Double-click `Install Spine.bat`** — downloads everything and configures automatically
-3. **Double-click `Launch Spine.bat`** — say **"Spine, wake up"** to start
+## Multi-LLM brain (how it works)
 
-That's it.
+Spine routes different tasks to different models:
 
-## What you get
+| Task | Model | Why |
+|------|-------|-----|
+| Chat / study / research | `qwen2.5:7b` (primary) | Deep thinking |
+| PC control / voice planning | `phi3:mini` (fast) | Speed |
+| Memory search | `nomic-embed-text` | Knowledge RAG |
 
-- **Personal assistant** — voice + small orb, formal and hands-free
-- **Remembers you** — conversations and knowledge saved locally
-- **Multi-agent brain** — research, study, files, PC control
-- **LLM supervision** — install and switch small local models (`models list`, `models pull`, `models use`)
-- **Adapts to your PC** — auto-detects Bluetooth headsets, noise cancellation, installed software
-
-## Folder layout
+### Commands (text mode: `Scripts\run_text.bat`)
 
 ```
-Spine_AI/
-├── Install Spine.bat      ← run once
-├── Launch Spine.bat       ← your daily launcher
-├── spine/                 ← application code
-├── agents/                ← specialist modules
-├── scripts/               ← internal launchers
-├── installer/             ← setup wizard
-├── memory/                ← your data (conversations, knowledge)
-└── logs/                  ← runtime logs
+models list          — installed models + routing map
+models routing       — show which brain handles what
+models pull phi3:mini
+models use fast      — switch chat to fast model
+models use primary   — switch chat to smart model
+models bench         — speed-test all models
+models train spine-custom   — build model from your notes
 ```
 
-## Voice commands
+### Voice
 
-| Say | Action |
-|-----|--------|
-| "Spine, wake up" | Activate assistant |
-| "Spine, sleep" | Go silent |
-| Natural speech | Ask anything after wake |
+- Natural-language commands (not rigid phrases): research, PC control, study, files
+- **GPU Whisper (CUDA 12)** via faster-whisper — default `stt_device: cuda` in `spine/config.yaml` (CUDA DLL path helper in `spine/cuda_paths.py`)
+- Edge TTS for spoken replies
+- Examples: *"Switch to fast model"*, *"Show me research papers on AI"*, *"Play jazz on Spotify"*, *"Open Discord"*
 
-## Text commands
+## Features
 
-| Command | Action |
-|---------|--------|
-| `models list` | Show installed LLMs |
-| `models pull phi3:mini` | Download a small model |
-| `models use qwen2.5:7b` | Switch active model |
-| `models recommend` | Hardware-based suggestions |
-| `index` | Index files in `memory/knowledge/` |
-| `remember <text>` | Save a note |
-| `research / study / files / pc` | Delegate to agents |
-| `capabilities` | Show detected PC software |
+- **Voice** — configurable listen windows; Whisper `tiny` on GPU when available
+- **PC control** — launch apps, Spotify, browser, shell commands, screen click
+- **Tray icon** — system tray (right-click Quit)
+- **Scheduler** — daily 8am knowledge index (`memory/scheduler.json`)
+- **Auto-index** — indexes `memory/knowledge/` on startup
+- **Boot** — starts on Windows login via `Install Startup.bat`
+- **Stress test** — multi-LLM routing & concurrency: `Scripts\run_stress_test.bat`
 
-## Requirements
+## Logs
 
-- Windows 10/11
-- Python 3.11+ (installer checks)
-- Ollama
-- 8 GB RAM minimum (16 GB recommended for 7B models)
-
-## Thesis
-
-Built by Sehan Balajee Pilli — Steinbeis University Master's in Business Management (Data Analytics & AI).
+`logs/spine_YYYYMMDD.log`

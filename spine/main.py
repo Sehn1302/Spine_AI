@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import sys
 
+from greeting import time_farewell, time_greeting
 from orchestrator import SpineOrchestrator, load_config
+from orb import VisualOrb
 from router import list_agents
-from voice import VoiceInterface
+from voice import VoiceInterface, list_audio_devices
 from voice_mode import run_voice_mode
+from visual_mode import run_visual_mode
 
 
 BANNER = """
@@ -27,12 +30,15 @@ BANNER = """
     pc <command>         — Controlled PC tools
     confirm / cancel     — Approve or abort pending PC actions
     voice                — Enter voice mode (speech in / speech out)
+    visual               — Animated orb + voice mode
+    devices              — List microphones and speakers
 ================================================================
 """
 
 
 def main() -> None:
     voice_startup = "--voice" in sys.argv
+    visual_startup = "--visual" in sys.argv
     print(BANNER)
 
     try:
@@ -44,6 +50,7 @@ def main() -> None:
     title = spine.user_title
     config = load_config()
     voice_cfg = config.get("voice", {})
+    visual_cfg = config.get("visual", {})
 
     voice = VoiceInterface(
         stt_model=voice_cfg.get("stt_model", "base"),
@@ -51,19 +58,30 @@ def main() -> None:
         tts_voice=voice_cfg.get("tts_voice", "en-GB-RyanNeural"),
         record_seconds=voice_cfg.get("record_seconds", 5),
         sample_rate=voice_cfg.get("sample_rate", 16000),
+        input_device=voice_cfg.get("input_device", "default"),
+        output_device=voice_cfg.get("output_device", "default"),
     )
+
+    orb = VisualOrb(
+        size=visual_cfg.get("orb_size", 220),
+        always_on_top=visual_cfg.get("always_on_top", True),
+    )
+
+    if visual_startup:
+        run_visual_mode(spine, voice, orb)
+        return
 
     if voice_startup:
         run_voice_mode(spine, voice)
         return
 
-    print(f"Spine is online. At your service, {title}.\n")
+    print(f"Spine: {time_greeting(title)}\n")
 
     while True:
         try:
             user_input = input(f"{title}: ").strip()
         except (EOFError, KeyboardInterrupt):
-            print(f"\n\nShutting down. Good evening, {title}.")
+            print(f"\n\nShutting down. {time_farewell(title)}")
             break
 
         if not user_input:
@@ -71,7 +89,7 @@ def main() -> None:
 
         lowered = user_input.lower()
         if lowered in {"exit", "quit", "bye", "goodbye"}:
-            print(f"\nSpine: Very good, {title}. I shall remain available when you return.")
+            print(f"\nSpine: {time_farewell(title)}")
             break
 
         if lowered == "new":
@@ -96,9 +114,18 @@ def main() -> None:
             print(f"\nSpine:\n{list_agents()}\n")
             continue
 
+        if lowered == "devices":
+            print(f"\n{list_audio_devices()}\n")
+            continue
+
         if lowered == "voice":
             run_voice_mode(spine, voice)
-            print(f"Spine is online. At your service, {title}.\n")
+            print(f"Spine: {time_greeting(title)}\n")
+            continue
+
+        if lowered == "visual":
+            run_visual_mode(spine, voice, orb)
+            print(f"Spine: {time_greeting(title)}\n")
             continue
 
         print("\nSpine: ", end="", flush=True)

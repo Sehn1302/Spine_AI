@@ -157,7 +157,7 @@ Edit `spine/config.yaml` to change:
 | 3 | Multi-agent delegation | Done |
 | 4 | Controlled PC tools | Done |
 | 5 | Voice interface (speech in / speech out) | Done |
-| 6 | Visual interface (animated orb UI) | Planned |
+| 6 | Visual interface (animated orb UI) | Done |
 
 ### Voice mode (Phase 5)
 
@@ -167,13 +167,15 @@ run_spine_voice.bat     — Start directly in voice mode
 
 Or in text mode, type `voice`.
 
-- Press **Enter** to speak (5-second recording)
+- Type `devices` to list microphones and speakers
+- Set `input_device` in `spine/config.yaml` (index or name), or use Windows default
+- Bluetooth earbuds: set as default **Input** and **Output** in Windows Sound settings
 - Spine transcribes with **Whisper** (GPU), responds with voice
 - Type **text** to return to keyboard mode
 - Formal British voice: `en-GB-RyanNeural`
 
 ```
-Spine: Good afternoon, Sir. Spine is online and listening.
+Spine: Good afternoon, Sir. I am online. How may I assist you?
 
 [Enter]
 Listening for 5 seconds...
@@ -182,16 +184,27 @@ Heard: "What is my thesis about?"
 Spine: [spoken + text response]
 ```
 
-### Phase 6 preview — Visual interface (planned)
+### Visual mode (Phase 6)
 
-A desktop visual for Spine — an animated sphere or circle that:
+```
+run_spine_visual.bat    — Animated orb + voice mode
+```
 
-- **Expands and contracts** while Spine is listening, thinking, or speaking
-- **Greets you on startup** — e.g. *"Good morning, Sir"* when your PC boots
-- **Reacts to your voice** in real time during conversation
-- Runs as a **lightweight overlay** or small always-on-top window (local only)
+Or in text mode, type `visual`.
 
-Likely stack: Python + a simple UI framework (e.g. PyQt, Tkinter, or a small web view) wired to Spine's orchestrator state (`idle` → `listening` → `thinking` → `speaking`).
+The orb changes color and pulse by state:
+
+| State | Orb behavior |
+|-------|----------------|
+| Idle | Blue, slow breathe |
+| Listening | Green, expands |
+| Thinking | Amber, fast pulse |
+| Speaking | Cyan, rhythmic pulse |
+
+Greetings match the time of day:
+- **5:00–11:59** → *"Good morning, Sir. I am online. How may I assist you?"*
+- **12:00–16:59** → *"Good afternoon, Sir. I am online. How may I assist you?"*
+- **17:00+** → *"Good evening, Sir. I am online. How may I assist you?"*
 
 ## GPU Note
 

@@ -23,6 +23,46 @@ class SpineState(str, Enum):
     SPEAKING = "speaking"
 
 
+def list_audio_devices() -> str:
+    """List available microphone and speaker devices."""
+    lines = ["Audio devices:", ""]
+    default_in, default_out = sd.default.device
+
+    lines.append("INPUT (microphones):")
+    for i, dev in enumerate(sd.query_devices()):
+        if dev["max_input_channels"] > 0:
+            marker = " [DEFAULT]" if i == default_in else ""
+            lines.append(f"  [{i}] {dev['name']}{marker}")
+
+    lines.append("")
+    lines.append("OUTPUT (speakers / headphones):")
+    for i, dev in enumerate(sd.query_devices()):
+        if dev["max_output_channels"] > 0:
+            marker = " [DEFAULT]" if i == default_out else ""
+            lines.append(f"  [{i}] {dev['name']}{marker}")
+
+    lines.append("")
+    lines.append("Set input_device / output_device in spine/config.yaml (index number).")
+    lines.append("Or set your device as default in Windows Sound settings.")
+    return "\n".join(lines)
+
+
+def resolve_device(device: int | str | None, *, kind: str) -> int | None:
+    """Resolve device from index, name substring, or None for system default."""
+    if device is None or device == "" or device == "default":
+        return None
+
+    if isinstance(device, int) or (isinstance(device, str) and device.isdigit()):
+        return int(device)
+
+    name = str(device).lower()
+    for i, dev in enumerate(sd.query_devices()):
+        channels = dev["max_input_channels"] if kind == "input" else dev["max_output_channels"]
+        if channels > 0 and name in dev["name"].lower():
+            return i
+    return None
+
+
 class VoiceInterface:
     def __init__(
         self,
@@ -31,6 +71,8 @@ class VoiceInterface:
         tts_voice: str = "en-GB-RyanNeural",
         record_seconds: int = 5,
         sample_rate: int = 16000,
+        input_device: int | str | None = None,
+        output_device: int | str | None = None,
         on_state_change: Callable[[SpineState], None] | None = None,
     ) -> None:
         self.stt_model_name = stt_model
@@ -38,9 +80,25 @@ class VoiceInterface:
         self.tts_voice = tts_voice
         self.record_seconds = record_seconds
         self.sample_rate = sample_rate
+        self.input_device = resolve_device(input_device, kind="input")
+        self.output_device = resolve_device(output_device, kind="output")
         self.on_state_change = on_state_change
         self.state = SpineState.IDLE
         self._whisper: WhisperModel | None = None
+        self._log_active_devices()
+
+    def _log_active_devices(self) -> None:
+        in_idx = self.input_device if self.input_device is not None else sd.default.device[0]
+        out_idx = self.output_device if self.output_device is not None else sd.default.device[1]
+        try:
+            in_name = sd.query_devices(in_idx)["name"]
+            out_name = sd.query_devices(out_idx)["name"]
+            logging.info("Voice input device: %s", in_name)
+            logging.info("Voice output device: %s", out_name)
+            print(f"Microphone: {in_name}")
+            print(f"Speaker:    {out_name}")
+        except Exception as exc:
+            logging.warning("Could not query audio devices: %s", exc)
 
     def _set_state(self, state: SpineState) -> None:
         self.state = state
@@ -68,6 +126,7 @@ class VoiceInterface:
             samplerate=self.sample_rate,
             channels=1,
             dtype="float32",
+            device=self.input_device,
         )
         sd.wait()
 

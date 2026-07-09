@@ -22,3 +22,6 @@ knowledge:
   chunk_size: 800
   chunk_overlap: 100
   top_k: 4
+
+pc:
+  max_organize_files: 100

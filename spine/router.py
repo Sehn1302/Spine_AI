@@ -6,6 +6,7 @@ AGENT_COMMANDS = {
     "research": "research",
     "study": "study",
     "files": "files",
+    "pc": "pc",
 }
 
 
@@ -26,7 +27,13 @@ def parse_agent_command(user_input: str) -> tuple[str, str] | None:
 def list_agents() -> str:
     return (
         "Available agents:\n"
-        "  research <query>  — Web search and summary\n"
-        "  study <query>     — Thesis and academic guidance\n"
-        "  files <path>      — Folder scan and organization advice (read-only)"
+        "  research <query>   — Web search and summary\n"
+        "  study <query>      — Thesis and academic guidance\n"
+        "  files <path>       — Folder scan and organization advice (read-only)\n"
+        "  pc <command>       — Controlled PC tools (open, processes, organize)\n"
+        "\n"
+        "PC sub-commands:\n"
+        "  pc open <app|path>     — Open application or file\n"
+        "  pc processes           — List running processes\n"
+        "  pc organize <folder>   — Plan organization (then type confirm/cancel)"
     )

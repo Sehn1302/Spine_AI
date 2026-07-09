@@ -65,6 +65,8 @@ Spine: Good evening, Sir. I am at your disposal...
 | `research <query>` | Web search and summary |
 | `study <query>` | Thesis and academic guidance |
 | `files <path>` | Scan a folder and suggest organization (read-only) |
+| `pc <command>` | Controlled PC tools (open, processes, organize) |
+| `confirm` / `cancel` | Approve or abort a pending PC file operation |
 
 ### Knowledge base
 
@@ -101,6 +103,24 @@ Spine: Routing complete, Sir. The Files module reports:
        [folder analysis and organization suggestions]
 ```
 
+### PC tools (Phase 4)
+
+All file changes require your explicit `confirm`. Every action is logged to `logs/actions.jsonl`.
+
+```
+Sir: pc processes
+
+Sir: pc open notepad
+
+Sir: pc organize C:\Users\user\Downloads
+Spine: Organization plan prepared, Sir.
+       PDF/  DOCX/  JPG/ ...
+       Type 'confirm' to apply or 'cancel' to abort.
+
+Sir: confirm
+Spine: Confirmed, Sir. Moved 12 file(s).
+```
+
 ## Project Structure
 
 ```
@@ -135,8 +155,20 @@ Edit `spine/config.yaml` to change:
 | 1 | Text chat + conversation memory | Done |
 | 2 | Knowledge base (RAG over your files) | Done |
 | 3 | Multi-agent delegation | Done |
-| 4 | Controlled PC tools | Planned |
-| 5 | Voice interface | Planned |
+| 4 | Controlled PC tools | Done |
+| 5 | Voice interface (speech in / speech out) | Planned |
+| 6 | Visual interface (animated orb UI) | Planned |
+
+### Phase 6 preview — Visual interface (planned)
+
+A desktop visual for Spine — an animated sphere or circle that:
+
+- **Expands and contracts** while Spine is listening, thinking, or speaking
+- **Greets you on startup** — e.g. *"Good morning, Sir"* when your PC boots
+- **Reacts to your voice** in real time during conversation
+- Runs as a **lightweight overlay** or small always-on-top window (local only)
+
+Likely stack: Python + a simple UI framework (e.g. PyQt, Tkinter, or a small web view) wired to Spine's orchestrator state (`idle` → `listening` → `thinking` → `speaking`).
 
 ## GPU Note
 

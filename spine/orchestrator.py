@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agents import FilesAgent, ResearchAgent, StudyAgent
+from agents import FilesAgent, PcAgent, ResearchAgent, StudyAgent
+from action_log import ActionLog
 from knowledge import KnowledgeBase
 from persona import build_system_prompt
 from router import list_agents, parse_agent_command
@@ -50,6 +51,7 @@ class SpineOrchestrator:
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         self.config = config or load_config()
         setup_logging(self.config["paths"]["logs"])
+        self.action_log = ActionLog(self.config["paths"]["logs"])
 
         self.user_title = self.config["user"]["title"]
         self.model = self.config["spine"]["model"]
@@ -83,6 +85,7 @@ class SpineOrchestrator:
             "research": ResearchAgent(self.model, self.user_title),
             "study": StudyAgent(self.model, self.user_title),
             "files": FilesAgent(self.model, self.user_title),
+            "pc": PcAgent(self.model, self.user_title, action_log=self.action_log),
         }
 
     def _load_latest_session(self) -> None:
@@ -217,7 +220,31 @@ class SpineOrchestrator:
         logging.info("Agent %s completed task", agent_name)
         return reply
 
+    def confirm_pending(self) -> str:
+        pc_agent: PcAgent = self.agents["pc"]
+        self.messages.append({"role": "user", "content": "[confirm]"})
+        result = pc_agent.apply_pending()
+        reply = result.summary
+        self.messages.append({"role": "assistant", "content": reply})
+        self._save_session()
+        return reply
+
+    def cancel_pending(self) -> str:
+        pc_agent: PcAgent = self.agents["pc"]
+        self.messages.append({"role": "user", "content": "[cancel]"})
+        result = pc_agent.cancel_pending()
+        reply = result.summary
+        self.messages.append({"role": "assistant", "content": reply})
+        self._save_session()
+        return reply
+
     def handle(self, user_input: str) -> str:
+        lowered = user_input.lower().strip()
+        if lowered in {"confirm", "yes"}:
+            return self.confirm_pending()
+        if lowered in {"cancel", "no", "abort"}:
+            return self.cancel_pending()
+
         route = parse_agent_command(user_input)
         if route:
             agent_name, task = route

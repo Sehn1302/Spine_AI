@@ -22,6 +22,8 @@ BANNER = """
     research <query>     — Web search and summary
     study <query>        — Thesis and academic guidance
     files <path>         — Scan a folder (read-only)
+    pc <command>         — Controlled PC tools
+    confirm / cancel     — Approve or abort pending PC actions
 ================================================================
 """
 

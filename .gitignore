@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 logs/*.log
+logs/actions.jsonl
 memory/conversations/*.json
 memory/chroma/
 memory/knowledge/*

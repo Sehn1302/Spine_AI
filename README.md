@@ -2,6 +2,8 @@
 
 Your personal AI assistant — installs like a game, runs entirely on your PC.
 
+> **Purchase:** [Portfolio & licensing](portfolio/) — available from the creator's site.
+
 ## Quick Start (3 steps)
 
 1. **Install [Ollama](https://ollama.com/download)** (Spine's brain)

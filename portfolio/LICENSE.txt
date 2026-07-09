@@ -1,0 +1,23 @@
+SPINE AI — PERSONAL LICENSE AGREEMENT
+
+Copyright (c) 2026 Sehan Balajee Pilli. All rights reserved.
+
+GRANT OF LICENSE
+Upon purchase, you are granted a non-exclusive, non-transferable license to
+install and use Spine AI on personal computers you own or control.
+
+RESTRICTIONS
+- You may NOT redistribute, resell, or sublicense Spine AI.
+- You may NOT remove copyright notices.
+- Source code is provided for personal use only.
+
+SUPPORT
+Email support is included for installation issues for 12 months from purchase.
+
+WARRANTY DISCLAIMER
+Software is provided "as is" without warranty. The author is not liable for
+any damages arising from use of this software.
+
+By installing Spine AI, you agree to these terms.
+
+Contact: [your email]

@@ -86,15 +86,18 @@
   // Orb particles
   const container = $("orbParticles");
   if (container) {
-    const colors = ["#00e8ff", "#c77dff", "#e040fb", "#9d4edd"];
-    for (let i = 0; i < 18; i++) {
+    const colors = ["#00e8ff", "#c77dff", "#e040fb", "#9d4edd", "#48cae4", "#ff6bcb"];
+    for (let i = 0; i < 28; i++) {
       const dot = document.createElement("span");
-      const angle = (i / 18) * Math.PI * 2;
-      const r = 35 + Math.random() * 25;
+      const angle = (i / 28) * Math.PI * 2;
+      const r = 30 + Math.random() * 28;
       dot.style.left = `${50 + Math.cos(angle) * r}%`;
       dot.style.top = `${50 + Math.sin(angle) * r}%`;
       dot.style.background = colors[i % colors.length];
+      dot.style.color = colors[i % colors.length];
       dot.style.animationDelay = `${Math.random() * 2}s`;
+      dot.style.width = `${4 + Math.random() * 4}px`;
+      dot.style.height = dot.style.width;
       container.appendChild(dot);
     }
   }

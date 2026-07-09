@@ -304,6 +304,10 @@ class VoiceInterface:
         auto_bluetooth: bool = True,
         prefer_enhanced_audio: bool = True,
         noise_cancellation: bool = True,
+        listen_mode: str = "continuous",
+        silence_stop_seconds: float = 1.0,
+        max_utterance_seconds: float = 25.0,
+        conversation_min_peak: float = 0.003,
         on_state_change: Callable[[SpineState], None] | None = None,
     ) -> None:
         self.stt_model_name = stt_model
@@ -313,6 +317,10 @@ class VoiceInterface:
         self.sleep_listen_seconds = sleep_listen_seconds
         self.min_peak = min_peak
         self.passive_min_peak = passive_min_peak
+        self.conversation_min_peak = conversation_min_peak
+        self.listen_mode = listen_mode
+        self.silence_stop_seconds = silence_stop_seconds
+        self.max_utterance_seconds = max_utterance_seconds
         self.sample_rate = sample_rate
         self._input_pref = input_device
         self._output_pref = output_device
@@ -433,30 +441,113 @@ class VoiceInterface:
 
         return temp_path
 
+    def _audio_to_wav(self, audio: np.ndarray) -> Path:
+        audio = np.squeeze(audio)
+        peak = float(np.max(np.abs(audio))) if audio.size else 0.0
+        if peak > 0 and peak < 0.12:
+            audio = audio * (0.12 / peak)
+
+        temp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        temp_path = Path(temp.name)
+        temp.close()
+
+        pcm = np.int16(np.clip(audio, -1.0, 1.0) * 32767)
+        with wave.open(str(temp_path), "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(self.sample_rate)
+            handle.writeframes(pcm.tobytes())
+        return temp_path
+
+    def _record_until_silence(
+        self,
+        *,
+        speech_threshold: float,
+        silence_seconds: float,
+        max_seconds: float,
+        listening_state: bool = True,
+    ) -> np.ndarray:
+        """Copilot-style: record while you speak, stop after a pause."""
+        if listening_state:
+            self._set_state(SpineState.LISTENING)
+
+        chunk_sec = 0.08
+        chunk_samples = int(self.sample_rate * chunk_sec)
+        silence_chunks = int(silence_seconds / chunk_sec)
+        max_chunks = int(max_seconds / chunk_sec)
+
+        buffers: list[np.ndarray] = []
+        speech_started = False
+        silent_count = 0
+        pre_roll: list[np.ndarray] = []
+        pre_roll_max = 4
+
+        for _ in range(max_chunks):
+            chunk = sd.rec(
+                chunk_samples,
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype="float32",
+                device=self.input_device,
+            )
+            sd.wait()
+            chunk = np.squeeze(chunk)
+
+            if _has_speech(chunk, threshold=speech_threshold):
+                if not speech_started:
+                    buffers.extend(pre_roll)
+                    speech_started = True
+                silent_count = 0
+                buffers.append(chunk)
+            elif speech_started:
+                silent_count += 1
+                buffers.append(chunk)
+                if silent_count >= silence_chunks:
+                    break
+            else:
+                pre_roll.append(chunk)
+                if len(pre_roll) > pre_roll_max:
+                    pre_roll.pop(0)
+
+        if not buffers:
+            raise ValueError("No speech detected.")
+
+        return np.concatenate(buffers)
+
     def _transcribe(self, wav_path: Path) -> str:
         model = self._get_whisper()
         kwargs: dict = {"beam_size": 5, "language": "en"}
         if self.noise_cancellation:
             kwargs["vad_filter"] = True
             kwargs["vad_parameters"] = {
-                "min_silence_duration_ms": 400,
-                "speech_pad_ms": 250,
-                "threshold": 0.55,
+                "min_silence_duration_ms": 300,
+                "speech_pad_ms": 300,
+                "threshold": 0.35,
             }
         segments, _ = model.transcribe(str(wav_path), **kwargs)
         return " ".join(segment.text.strip() for segment in segments).strip()
 
     def listen(self) -> str:
+        """Listen like Copilot — continuous until you stop speaking."""
         self.refresh_devices()
-        print(f"Listening for {self.record_seconds} seconds...")
         wav_path: Path | None = None
         try:
-            wav_path = self._record_wav(listening_state=True)
-            text = self._transcribe(wav_path)
+            if self.listen_mode == "continuous":
+                audio = self._record_until_silence(
+                    speech_threshold=self.conversation_min_peak,
+                    silence_seconds=self.silence_stop_seconds,
+                    max_seconds=self.max_utterance_seconds,
+                )
+                if self.noise_cancellation:
+                    audio = _trim_to_speech(audio, self.sample_rate, threshold=self.conversation_min_peak * 0.5)
+                wav_path = self._audio_to_wav(audio)
+            else:
+                print(f"Listening for {self.record_seconds} seconds...")
+                wav_path = self._record_wav(listening_state=True)
 
+            text = self._transcribe(wav_path)
             if not text:
                 raise ValueError("Could not understand speech. Please try again.")
-
             print(f'Heard: "{text}"')
             return text
         finally:

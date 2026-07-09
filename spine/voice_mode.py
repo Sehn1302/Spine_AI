@@ -92,8 +92,8 @@ def run_voice_mode(
     phrases = wake_phrases or ("spine wake up", "spine wakeup", "spine, wake up")
 
     print("\n================================================================")
-    print("   VOICE MODE — sleeping until wake phrase")
-    print("   Say 'Spine, wake up' to activate")
+    print("   VOICE MODE — Copilot-style continuous listening after wake")
+    print("   Say 'Spine, wake up' then speak naturally (stops when you pause)")
     print("   Say 'Spine, sleep' to go silent | 'exit' to quit")
     print("================================================================\n")
 

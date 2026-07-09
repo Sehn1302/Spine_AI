@@ -36,9 +36,13 @@ voice:
   output_device: default
   auto_bluetooth: true        # auto-use any connected Bluetooth / wireless headset
   prefer_enhanced_audio: true # use noise-cancelling mics (Armoury Crate, NVIDIA Broadcast, etc.)
-  noise_cancellation: true    # software VAD + speech gate — ignores background noise
-  min_peak: 0.006              # minimum speech level for active listening
-  passive_min_peak: 0.012      # higher threshold while sleeping — ignores ambient noise
+  noise_cancellation: true    # software VAD — filters noise, keeps your voice
+  listen_mode: continuous    # copilot-style: listens until you stop speaking
+  silence_stop_seconds: 1.0   # stop after this many seconds of silence
+  max_utterance_seconds: 25   # max length per phrase
+  conversation_min_peak: 0.003 # sensitive mic pickup while awake
+  min_peak: 0.004              # fallback for fixed-length mode
+  passive_min_peak: 0.008       # threshold while sleeping (wake phrase only)
   conversational: true        # after wake: continuous talk like executive assistant
 
 visual:

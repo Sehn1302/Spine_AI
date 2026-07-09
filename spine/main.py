@@ -70,11 +70,15 @@ def main() -> None:
         input_device=voice_cfg.get("input_device", "default"),
         output_device=voice_cfg.get("output_device", "default"),
         sleep_listen_seconds=wake_cfg.get("sleep_listen_seconds", 3),
-        min_peak=voice_cfg.get("min_peak", 0.006),
-        passive_min_peak=voice_cfg.get("passive_min_peak", 0.012),
+        min_peak=voice_cfg.get("min_peak", 0.004),
+        passive_min_peak=voice_cfg.get("passive_min_peak", 0.008),
         auto_bluetooth=voice_cfg.get("auto_bluetooth", True),
         prefer_enhanced_audio=voice_cfg.get("prefer_enhanced_audio", True),
         noise_cancellation=voice_cfg.get("noise_cancellation", True),
+        listen_mode=voice_cfg.get("listen_mode", "continuous"),
+        silence_stop_seconds=voice_cfg.get("silence_stop_seconds", 1.0),
+        max_utterance_seconds=voice_cfg.get("max_utterance_seconds", 25.0),
+        conversation_min_peak=voice_cfg.get("conversation_min_peak", 0.003),
     )
 
     wake_kwargs = {

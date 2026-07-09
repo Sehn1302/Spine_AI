@@ -156,8 +156,31 @@ Edit `spine/config.yaml` to change:
 | 2 | Knowledge base (RAG over your files) | Done |
 | 3 | Multi-agent delegation | Done |
 | 4 | Controlled PC tools | Done |
-| 5 | Voice interface (speech in / speech out) | Planned |
+| 5 | Voice interface (speech in / speech out) | Done |
 | 6 | Visual interface (animated orb UI) | Planned |
+
+### Voice mode (Phase 5)
+
+```
+run_spine_voice.bat     — Start directly in voice mode
+```
+
+Or in text mode, type `voice`.
+
+- Press **Enter** to speak (5-second recording)
+- Spine transcribes with **Whisper** (GPU), responds with voice
+- Type **text** to return to keyboard mode
+- Formal British voice: `en-GB-RyanNeural`
+
+```
+Spine: Good afternoon, Sir. Spine is online and listening.
+
+[Enter]
+Listening for 5 seconds...
+Heard: "What is my thesis about?"
+
+Spine: [spoken + text response]
+```
 
 ### Phase 6 preview — Visual interface (planned)
 
@@ -172,7 +195,7 @@ Likely stack: Python + a simple UI framework (e.g. PyQt, Tkinter, or a small web
 
 ## GPU Note
 
-If you encounter CUDA errors, `run_spine.bat` includes a CPU fallback (`OLLAMA_NUM_GPU=0`). Remove that line after updating your NVIDIA drivers to enable GPU acceleration.
+If Spine runs on CPU only, check that `OLLAMA_NO_GPU` is not set to `1` in Windows environment variables. `run_spine.bat` forces GPU mode automatically.
 
 ## Author
 

@@ -199,8 +199,7 @@ class VisualOrb:
             self.root.attributes("-topmost", True)
 
         self.canvas = tk.Canvas(
-            self.size,
-            self.size,
+            self.root,
             width=self.size,
             height=self.size,
             bg="#010101",

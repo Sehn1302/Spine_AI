@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 from orchestrator import SpineOrchestrator
+from router import list_agents
 
 
 BANNER = """
@@ -13,8 +14,14 @@ BANNER = """
    Executive AI Orchestrator — Local Interface
 ================================================================
   Commands:
-    exit, quit, bye   — End session
-    new               — Start a fresh conversation
+    exit, quit, bye      — End session
+    new                  — Start a fresh conversation
+    index                — Index files in memory/knowledge/
+    remember <text>      — Save a note to the knowledge base
+    agents               — List specialist agents
+    research <query>     — Web search and summary
+    study <query>        — Thesis and academic guidance
+    files <path>         — Scan a folder (read-only)
 ================================================================
 """
 
@@ -51,8 +58,25 @@ def main() -> None:
             print(f"\nSpine: A fresh session has been initiated, {title}.\n")
             continue
 
+        if lowered == "index":
+            print("\nSpine: ", end="", flush=True)
+            print(spine.index_knowledge())
+            print()
+            continue
+
+        if lowered.startswith("remember "):
+            note = user_input[len("remember ") :].strip()
+            print("\nSpine: ", end="", flush=True)
+            print(spine.remember(note))
+            print()
+            continue
+
+        if lowered == "agents":
+            print(f"\nSpine:\n{list_agents()}\n")
+            continue
+
         print("\nSpine: ", end="", flush=True)
-        reply = spine.chat(user_input)
+        reply = spine.handle(user_input)
         print(reply)
         print()
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -11,9 +12,14 @@ from typing import Any
 import ollama
 import yaml
 
-from persona import build_system_prompt
-
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from agents import FilesAgent, ResearchAgent, StudyAgent
+from knowledge import KnowledgeBase
+from persona import build_system_prompt
+from router import list_agents, parse_agent_command
 
 
 def load_config() -> dict[str, Any]:
@@ -21,7 +27,7 @@ def load_config() -> dict[str, Any]:
     with config_path.open(encoding="utf-8") as handle:
         raw = yaml.safe_load(handle)
 
-    for key in ("memory", "conversations", "logs"):
+    for key in ("memory", "conversations", "knowledge", "chroma", "logs"):
         raw["paths"][key] = str((ROOT / raw["paths"][key]).resolve())
 
     return raw
@@ -60,7 +66,24 @@ class SpineOrchestrator:
         self.messages: list[dict[str, str]] = []
         self._load_latest_session()
 
+        knowledge_cfg = self.config.get("knowledge", {})
+        self.knowledge = KnowledgeBase(
+            knowledge_dir=self.config["paths"]["knowledge"],
+            chroma_dir=self.config["paths"]["chroma"],
+            embed_model=knowledge_cfg.get("embed_model", "nomic-embed-text"),
+            chunk_size=knowledge_cfg.get("chunk_size", 800),
+            chunk_overlap=knowledge_cfg.get("chunk_overlap", 100),
+            top_k=knowledge_cfg.get("top_k", 4),
+        )
+
         logging.info("Spine online — session %s, model %s", self.session_id, self.model)
+        logging.info("Knowledge base ready — %d indexed chunks", self.knowledge.document_count)
+
+        self.agents = {
+            "research": ResearchAgent(self.model, self.user_title),
+            "study": StudyAgent(self.model, self.user_title),
+            "files": FilesAgent(self.model, self.user_title),
+        }
 
     def _load_latest_session(self) -> None:
         sessions = sorted(self.conversations_dir.glob("session_*.json"))
@@ -90,8 +113,19 @@ class SpineOrchestrator:
         with self.session_file.open("w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2, ensure_ascii=False)
 
-    def _build_ollama_messages(self) -> list[dict[str, str]]:
-        system = {"role": "system", "content": build_system_prompt(self.user_title, self.spine_name)}
+    def _build_ollama_messages(self, user_input: str | None = None) -> list[dict[str, str]]:
+        system_content = build_system_prompt(self.user_title, self.spine_name)
+
+        if user_input:
+            hits = self.knowledge.search(user_input)
+            context = self.knowledge.format_context(hits)
+            if context:
+                system_content += (
+                    f"\n\nRelevant knowledge from {self.user_title}'s files "
+                    f"(cite the source when used):\n\n{context}"
+                )
+
+        system = {"role": "system", "content": system_content}
         recent = self.messages[-self.max_history :] if self.messages else []
         return [system, *recent]
 
@@ -101,7 +135,7 @@ class SpineOrchestrator:
         try:
             response = ollama.chat(
                 model=self.model,
-                messages=self._build_ollama_messages(),
+                messages=self._build_ollama_messages(user_input),
             )
             reply = response["message"]["content"]
         except Exception as exc:
@@ -116,6 +150,79 @@ class SpineOrchestrator:
         self._save_session()
         logging.info("Exchange saved — %d messages in session", len(self.messages))
         return reply
+
+    def index_knowledge(self) -> str:
+        try:
+            stats = self.knowledge.index_all()
+        except Exception as exc:
+            logging.error("Knowledge indexing failed: %s", exc)
+            return (
+                f"My apologies, {self.user_title}. Knowledge indexing failed. "
+                f"Ensure Ollama is running and the embedding model is installed "
+                f"(run: ollama pull {self.knowledge.embed_model})."
+            )
+
+        return (
+            f"Knowledge base updated, {self.user_title}. "
+            f"Indexed {stats['indexed']} file(s), skipped {stats['skipped']} unchanged, "
+            f"{stats['total_chunks']} total chunk(s) available."
+        )
+
+    def remember(self, text: str) -> str:
+        if not text.strip():
+            return f"Please provide text to remember, {self.user_title}."
+
+        try:
+            filename = self.knowledge.add_note(text)
+        except Exception as exc:
+            logging.error("Failed to save note: %s", exc)
+            return f"My apologies, {self.user_title}. I could not save that note."
+
+        return (
+            f"Noted, {self.user_title}. Saved to memory/knowledge/{filename}. "
+            f"I shall recall it in future conversations."
+        )
+
+    def delegate(self, agent_name: str, task: str) -> str:
+        agent = self.agents.get(agent_name)
+        if not agent:
+            return f"Unknown agent '{agent_name}', {self.user_title}."
+
+        self.messages.append({"role": "user", "content": f"[{agent_name}] {task}"})
+        logging.info("Delegating to %s agent: %s", agent_name, task)
+
+        try:
+            if agent_name == "study":
+                hits = self.knowledge.search(task)
+                context = self.knowledge.format_context(hits)
+                result = agent.run(task, knowledge_context=context)
+            else:
+                result = agent.run(task)
+        except Exception as exc:
+            logging.error("Agent %s failed: %s", agent_name, exc)
+            reply = (
+                f"My apologies, {self.user_title}. The {agent_name} agent encountered an error. "
+                "Please try again shortly."
+            )
+            self.messages.append({"role": "assistant", "content": reply})
+            self._save_session()
+            return reply
+
+        reply = (
+            f"Routing complete, {self.user_title}. The {agent_name.title()} module reports:\n\n"
+            f"{result.summary}"
+        )
+        self.messages.append({"role": "assistant", "content": reply})
+        self._save_session()
+        logging.info("Agent %s completed task", agent_name)
+        return reply
+
+    def handle(self, user_input: str) -> str:
+        route = parse_agent_command(user_input)
+        if route:
+            agent_name, task = route
+            return self.delegate(agent_name, task)
+        return self.chat(user_input)
 
     def new_session(self) -> None:
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -3,5 +3,9 @@ __pycache__/
 *.pyc
 logs/*.log
 memory/conversations/*.json
+memory/chroma/
+memory/knowledge/*
+!memory/knowledge/.gitkeep
+!memory/knowledge/README.txt
 Scripts/
 Lib/

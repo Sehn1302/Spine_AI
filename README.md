@@ -9,6 +9,7 @@ Built as a Master's thesis project in Business Management (Data Analytics & AI s
 - **Local-first** — runs on your machine; no cloud API required
 - **Formal executive persona** — precise, composed, proactive assistance
 - **Persistent memory** — conversations saved to disk and portable across devices
+- **Knowledge base (RAG)** — index your notes and files; Spine recalls them in conversation
 - **Multi-agent ready** — orchestrator architecture prepared for Research, Files, and Study agents
 - **Action logging** — every exchange logged for evaluation and thesis analysis
 
@@ -29,10 +30,11 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\pip install -r requirements.txt
 ```
 
-### 2. Pull the language model
+### 2. Pull the language models
 
 ```powershell
 ollama pull qwen2.5:7b
+ollama pull nomic-embed-text
 ```
 
 ### 3. Run Spine
@@ -57,6 +59,47 @@ Spine: Good evening, Sir. I am at your disposal...
 |---------|--------|
 | `exit` / `quit` / `bye` | End session |
 | `new` | Start a fresh conversation |
+| `index` | Index files in `memory/knowledge/` |
+| `remember <text>` | Save a note to the knowledge base |
+| `agents` | List specialist agents |
+| `research <query>` | Web search and summary |
+| `study <query>` | Thesis and academic guidance |
+| `files <path>` | Scan a folder and suggest organization (read-only) |
+
+### Knowledge base
+
+1. Drop `.txt`, `.md`, `.csv`, `.json`, or `.yaml` files into `memory/knowledge/`
+2. In Spine, run: `index`
+3. Ask questions — Spine automatically searches your files for relevant context
+
+```
+Sir: remember My thesis focuses on multi-agent orchestration for local AI systems.
+
+Spine: Noted, Sir. Saved to memory/knowledge/note_20260709_120000.md...
+
+Sir: What is my thesis about?
+
+Spine: Your thesis focuses on multi-agent orchestration for local AI systems, Sir.
+```
+
+### Specialist agents
+
+```
+Sir: research agentic AI frameworks 2025
+
+Spine: Routing complete, Sir. The Research module reports:
+       [summarized web findings with sources]
+
+Sir: study outline my thesis introduction chapter
+
+Spine: Routing complete, Sir. The Study module reports:
+       [structured academic guidance]
+
+Sir: files C:\Users\user\Downloads
+
+Spine: Routing complete, Sir. The Files module reports:
+       [folder analysis and organization suggestions]
+```
 
 ## Project Structure
 
@@ -69,7 +112,9 @@ Spine_AI/
 │   └── config.yaml       # Model, paths, user settings
 ├── agents/               # Specialist agents (Month 3+)
 ├── memory/
-│   └── conversations/    # Saved sessions (portable)
+│   ├── conversations/    # Saved sessions (portable)
+│   ├── knowledge/        # Your notes and files (RAG source)
+│   └── chroma/           # Vector index (auto-generated)
 ├── logs/                 # Action logs
 ├── run_spine.bat         # Windows launcher
 └── requirements.txt
@@ -88,8 +133,8 @@ Edit `spine/config.yaml` to change:
 | Phase | Feature | Status |
 |-------|---------|--------|
 | 1 | Text chat + conversation memory | Done |
-| 2 | Knowledge base (RAG over your files) | Planned |
-| 3 | Multi-agent delegation | Planned |
+| 2 | Knowledge base (RAG over your files) | Done |
+| 3 | Multi-agent delegation | Done |
 | 4 | Controlled PC tools | Planned |
 | 5 | Voice interface | Planned |
 

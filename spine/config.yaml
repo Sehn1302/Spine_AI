@@ -10,7 +10,15 @@ spine:
 paths:
   memory: "../memory"
   conversations: "../memory/conversations"
+  knowledge: "../memory/knowledge"
+  chroma: "../memory/chroma"
   logs: "../logs"
 
 chat:
   max_history_messages: 20  # Recent turns kept in context
+
+knowledge:
+  embed_model: "nomic-embed-text"  # Run: ollama pull nomic-embed-text
+  chunk_size: 800
+  chunk_overlap: 100
+  top_k: 4

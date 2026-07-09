@@ -129,8 +129,8 @@ def wait_for_ollama(timeout_seconds: int = 90) -> bool:
 
 
 def wait_for_audio(seconds: float = 12.0) -> None:
-    """Give Windows audio drivers time after login."""
-    logging.info("Waiting %.0fs for audio drivers...", seconds)
+    """Give Windows audio drivers and display time after login."""
+    logging.info("Waiting %.0fs for audio/display drivers...", seconds)
     time.sleep(seconds)
 
 

@@ -1,10 +1,9 @@
 @echo off
 title Uninstall Spine Startup
-set "LINK=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Spine_AI_Startup.bat"
-if exist "%LINK%" (
-    del "%LINK%"
-    echo Spine startup removed.
-) else (
-    echo Spine startup was not installed.
-)
+set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
+
+if exist "%STARTUP%\Spine_AI_Startup.vbs" del "%STARTUP%\Spine_AI_Startup.vbs"
+if exist "%STARTUP%\Spine_AI_Startup.bat" del "%STARTUP%\Spine_AI_Startup.bat"
+
+echo Spine startup removed.
 pause

@@ -33,7 +33,7 @@ def run_visual_mode(
             orb.set_state(SpineState.SLEEPING)
             if boot_mode:
                 log_boot("Boot voice thread started.")
-                wait_for_audio(8.0)
+                wait_for_audio(15.0)
                 if not wait_for_ollama(90):
                     log_boot("Ollama unavailable — voice answers will fail until Ollama starts.")
                 voice.refresh_devices()
@@ -56,4 +56,8 @@ def run_visual_mode(
 
     thread = threading.Thread(target=voice_thread, daemon=True)
     thread.start()
+
+    if boot_mode:
+        time.sleep(3)
+
     orb.run()

@@ -51,12 +51,23 @@ def ensure_single_instance() -> bool:
             if _pid_alive(old_pid):
                 logging.warning("Spine already running (PID %s). Exiting duplicate.", old_pid)
                 return False
+            LOCK_FILE.unlink(missing_ok=True)
         except (ValueError, OSError):
-            pass
+            LOCK_FILE.unlink(missing_ok=True)
 
-    LOCK_FILE.write_text(str(os.getpid()), encoding="utf-8")
-    logging.info("Single instance lock acquired (PID %s)", os.getpid())
-    return True
+    try:
+        import errno
+
+        fd = os.open(str(LOCK_FILE), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        logging.info("Single instance lock acquired (PID %s)", os.getpid())
+        return True
+    except OSError as exc:
+        if exc.errno == errno.EEXIST:
+            logging.warning("Spine startup lock busy — another instance starting.")
+            return False
+        raise
 
 
 def release_instance_lock() -> None:

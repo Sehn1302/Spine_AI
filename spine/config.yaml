@@ -8,11 +8,11 @@ spine:
   model: "qwen2.5:7b"  # Run: ollama pull qwen2.5:7b
 
 paths:
-  memory: "../memory"
-  conversations: "../memory/conversations"
-  knowledge: "../memory/knowledge"
-  chroma: "../memory/chroma"
-  logs: "../logs"
+  memory: "memory"
+  conversations: "memory/conversations"
+  knowledge: "memory/knowledge"
+  chroma: "memory/chroma"
+  logs: "logs"
 
 chat:
   max_history_messages: 20  # Recent turns kept in context
@@ -63,5 +63,5 @@ wake:
 
 host:
   scan_on_startup: true       # detect installed software on this PC
-  cache_path: "../memory/host_capabilities.json"
+  cache_path: "memory/host_capabilities.json"
   rescan_hours: 24            # re-scan after this many hours

@@ -31,11 +31,14 @@ def load_config() -> dict[str, Any]:
         raw = yaml.safe_load(handle)
 
     for key in ("memory", "conversations", "knowledge", "chroma", "logs"):
-        raw["paths"][key] = str((ROOT / raw["paths"][key]).resolve())
+        value = raw["paths"][key]
+        path = Path(value)
+        raw["paths"][key] = str(path if path.is_absolute() else (ROOT / value).resolve())
 
     host_cfg = raw.get("host", {})
     if host_cfg.get("cache_path"):
-        host_cfg["cache_path"] = str((ROOT / host_cfg["cache_path"]).resolve())
+        cache = Path(host_cfg["cache_path"])
+        host_cfg["cache_path"] = str(cache if cache.is_absolute() else (ROOT / host_cfg["cache_path"]).resolve())
         raw["host"] = host_cfg
 
     return raw

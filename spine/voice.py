@@ -385,6 +385,8 @@ class VoiceInterface:
             logging.warning("Could not query audio devices: %s", exc)
 
     def _set_state(self, state: SpineState) -> None:
+        if self.state == state:
+            return
         self.state = state
         logging.info("Voice state: %s", state.value)
         if self.on_state_change:
@@ -621,14 +623,16 @@ class VoiceInterface:
         try:
             import pygame
 
+            pygame.mixer.quit()
+            played = False
             out_idx = self.output_device if self.output_device is not None else sd.default.device[1]
-            out_name = sd.query_devices(out_idx)["name"]
-
-            if not pygame.mixer.get_init():
+            try:
+                out_name = sd.query_devices(out_idx)["name"]
                 pygame.mixer.init(devicename=out_name)
-            else:
-                pygame.mixer.quit()
-                pygame.mixer.init(devicename=out_name)
+                played = True
+            except Exception as exc:
+                logging.warning("Output device init failed (%s), using Windows default.", exc)
+                pygame.mixer.init()
 
             pygame.mixer.music.load(str(path))
             pygame.mixer.music.play()

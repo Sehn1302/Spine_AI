@@ -20,6 +20,7 @@ from agents import FilesAgent, PcAgent, ResearchAgent, StudyAgent
 from action_log import ActionLog
 from host_capabilities import HostCapabilities
 from knowledge import KnowledgeBase
+from model_manager import ModelManager
 from persona import build_system_prompt
 from router import list_agents, parse_agent_command
 
@@ -105,6 +106,7 @@ class SpineOrchestrator:
             "files": FilesAgent(self.model, self.user_title),
             "pc": PcAgent(self.model, self.user_title, action_log=self.action_log, host_caps=self.host_caps),
         }
+        self.models = ModelManager(self.config)
 
     def _load_latest_session(self) -> None:
         sessions = sorted(self.conversations_dir.glob("session_*.json"))
@@ -257,12 +259,28 @@ class SpineOrchestrator:
         self._save_session()
         return reply
 
+    def handle_models(self, task: str) -> str:
+        reply = self.models.handle(task)
+        if task.strip().lower().startswith(("use ", "set ", "switch ")):
+            self.config = load_config()
+            self.model = self.config["spine"]["model"]
+            for agent in self.agents.values():
+                agent.model = self.model
+        self.messages.append({"role": "user", "content": f"[models] {task}"})
+        self.messages.append({"role": "assistant", "content": reply})
+        self._save_session()
+        return reply
+
     def handle(self, user_input: str) -> str:
         lowered = user_input.lower().strip()
         if lowered in {"confirm", "yes"}:
             return self.confirm_pending()
         if lowered in {"cancel", "no", "abort"}:
             return self.cancel_pending()
+
+        if lowered == "models" or lowered.startswith("models "):
+            task = user_input[6:].strip() if lowered.startswith("models ") else "list"
+            return self.handle_models(task)
 
         route = parse_agent_command(user_input)
         if route:

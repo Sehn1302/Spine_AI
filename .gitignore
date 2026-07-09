@@ -1,12 +1,16 @@
 .venv/
+.venv/Scripts/
+Scripts/*.exe
 __pycache__/
 *.pyc
+.spine_installed
 logs/*.log
 logs/actions.jsonl
 memory/conversations/*.json
 memory/chroma/
+memory/host_capabilities.json
 memory/knowledge/*
 !memory/knowledge/.gitkeep
 !memory/knowledge/README.txt
-Scripts/
+data/
 Lib/

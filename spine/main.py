@@ -34,7 +34,7 @@ BANNER = """
     devices              — List microphones and speakers
     capabilities         — Show software detected on this PC
     refresh audio        — Re-scan for newly connected wireless devices
-    refresh capabilities — Re-scan installed host software
+    models list / pull / use — Manage local LLMs under Spine
 ================================================================
 """
 

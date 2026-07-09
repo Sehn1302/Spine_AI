@@ -69,9 +69,10 @@ class PcAgent(BaseAgent):
     name = "pc"
     description = "Launch apps, write documents, organize folders, remove duplicates"
 
-    def __init__(self, model: str, user_title: str = "Sir", action_log=None) -> None:
+    def __init__(self, model: str, user_title: str = "Sir", action_log=None, host_caps=None) -> None:
         super().__init__(model, user_title)
         self.action_log = action_log
+        self.host_caps = host_caps
         self.pending: PendingAction | None = None
 
     def _log(self, action: str, target: str, status: str, details: dict | None = None) -> None:
@@ -116,6 +117,8 @@ class PcAgent(BaseAgent):
             "organize": self._organize,
             "duplicates": self._duplicates,
             "cleanup": self._cleanup,
+            "capabilities": self._capabilities,
+            "software": self._capabilities,
             "help": lambda _: AgentResult(self.name, self._help()),
             "commands": lambda _: AgentResult(self.name, self._help()),
         }
@@ -139,10 +142,16 @@ class PcAgent(BaseAgent):
             "  pc duplicates <folder>  — Find and remove duplicate files\n"
             "  pc cleanup <folder>     — Organize + remove duplicates\n"
             "  pc processes            — List running processes\n"
+            "  pc capabilities         — Show detected host software\n"
             "  pc help                   — Show this help\n"
             "After organize/duplicates/cleanup, use 'confirm' or 'cancel'.\n"
             "Voice examples: 'launch minecraft', 'remove duplicates in Downloads'"
         )
+
+    def _capabilities(self, _: str = "") -> AgentResult:
+        if not self.host_caps:
+            return AgentResult(self.name, f"No host scan available, {self.user_title}.")
+        return AgentResult(self.name, self.host_caps.format_report())
 
     def _launch(self, target: str) -> AgentResult:
         if not target:
@@ -150,6 +159,23 @@ class PcAgent(BaseAgent):
 
         name = target.strip()
         lowered = name.lower()
+
+        if self.host_caps:
+            host_target = self.host_caps.launch_target(name)
+            if host_target:
+                try:
+                    subprocess.run(
+                        ["powershell", "-Command", f'Start-Process "{host_target}"'],
+                        check=False,
+                        timeout=15,
+                    )
+                    self._log("launch", host_target, "success", {"source": "host_caps"})
+                    return AgentResult(
+                        self.name,
+                        f"Launched {host_target} using detected host software, {self.user_title}.",
+                    )
+                except Exception as exc:
+                    logging.debug("Host launch failed, falling back: %s", exc)
 
         try:
             if lowered in WINDOWS_APPS:

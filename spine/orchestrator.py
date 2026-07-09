@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
 
 from agents import FilesAgent, PcAgent, ResearchAgent, StudyAgent
 from action_log import ActionLog
+from host_capabilities import HostCapabilities
 from knowledge import KnowledgeBase
 from persona import build_system_prompt
 from router import list_agents, parse_agent_command
@@ -30,6 +31,11 @@ def load_config() -> dict[str, Any]:
 
     for key in ("memory", "conversations", "knowledge", "chroma", "logs"):
         raw["paths"][key] = str((ROOT / raw["paths"][key]).resolve())
+
+    host_cfg = raw.get("host", {})
+    if host_cfg.get("cache_path"):
+        host_cfg["cache_path"] = str((ROOT / host_cfg["cache_path"]).resolve())
+        raw["host"] = host_cfg
 
     return raw
 
@@ -81,11 +87,21 @@ class SpineOrchestrator:
         logging.info("Spine online — session %s, model %s", self.session_id, self.model)
         logging.info("Knowledge base ready — %d indexed chunks", self.knowledge.document_count)
 
+        host_cfg = self.config.get("host", {})
+        self.host_caps = HostCapabilities(
+            cache_path=host_cfg.get("cache_path"),
+            rescan_hours=host_cfg.get("rescan_hours", 24),
+        )
+        if host_cfg.get("scan_on_startup", True):
+            self.host_caps.load_or_scan()
+            print(self.host_caps.format_report())
+            print()
+
         self.agents = {
             "research": ResearchAgent(self.model, self.user_title),
             "study": StudyAgent(self.model, self.user_title),
             "files": FilesAgent(self.model, self.user_title),
-            "pc": PcAgent(self.model, self.user_title, action_log=self.action_log),
+            "pc": PcAgent(self.model, self.user_title, action_log=self.action_log, host_caps=self.host_caps),
         }
 
     def _load_latest_session(self) -> None:
@@ -117,7 +133,8 @@ class SpineOrchestrator:
             json.dump(payload, handle, indent=2, ensure_ascii=False)
 
     def _build_ollama_messages(self, user_input: str | None = None) -> list[dict[str, str]]:
-        system_content = build_system_prompt(self.user_title, self.spine_name)
+        host_context = self.host_caps.format_for_prompt() if hasattr(self, "host_caps") else ""
+        system_content = build_system_prompt(self.user_title, self.spine_name, host_context=host_context)
 
         if user_input:
             hits = self.knowledge.search(user_input)

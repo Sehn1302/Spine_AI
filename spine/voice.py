@@ -15,6 +15,8 @@ import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
 
+from host_capabilities import find_enhanced_audio_device
+
 
 class SpineState(str, Enum):
     SLEEPING = "sleeping"
@@ -37,6 +39,12 @@ def list_audio_devices() -> str:
                 marker += " [DEFAULT]"
             if _is_wireless_device(dev["name"]):
                 marker += " [WIRELESS]"
+            try:
+                from host_capabilities import _is_enhanced_audio_device
+                if _is_enhanced_audio_device(dev["name"]):
+                    marker += " [ENHANCED]"
+            except ImportError:
+                pass
             lines.append(f"  [{i}] {dev['name']}{marker}")
 
     lines.append("")
@@ -48,11 +56,16 @@ def list_audio_devices() -> str:
                 marker += " [DEFAULT]"
             if _is_wireless_device(dev["name"]):
                 marker += " [WIRELESS]"
+            try:
+                from host_capabilities import _is_enhanced_audio_device
+                if _is_enhanced_audio_device(dev["name"]):
+                    marker += " [ENHANCED]"
+            except ImportError:
+                pass
             lines.append(f"  [{i}] {dev['name']}{marker}")
 
     lines.append("")
-    lines.append("With auto_bluetooth: true, Spine uses your Windows default wireless device,")
-    lines.append("or any connected Bluetooth / headset mic and speaker automatically.")
+    lines.append("Spine auto-picks [ENHANCED] noise-cancelling mics and [WIRELESS] Bluetooth devices.")
     lines.append("Set input_device / output_device in spine/config.yaml to pin a specific index.")
     return "\n".join(lines)
 
@@ -209,9 +222,16 @@ def resolve_audio_pair(
     output_pref: int | str | None,
     *,
     auto_bluetooth: bool,
+    prefer_enhanced_audio: bool = True,
 ) -> tuple[int | None, int | None]:
-    """Resolve mic + speaker, pairing wireless endpoints from the same device when possible."""
+    """Resolve mic + speaker, using host noise cancellation and wireless when available."""
+    explicit_input = input_pref not in (None, "", "default")
+    explicit_output = output_pref not in (None, "", "default")
+
     input_device = resolve_device(input_pref, kind="input", auto_bluetooth=auto_bluetooth)
+    if input_device is None and prefer_enhanced_audio and not explicit_input:
+        input_device = find_enhanced_audio_device("input")
+
     input_name = sd.query_devices(input_device)["name"] if input_device is not None else None
 
     output_device = resolve_device(
@@ -220,6 +240,8 @@ def resolve_audio_pair(
         auto_bluetooth=auto_bluetooth,
         paired_with=input_name,
     )
+    if output_device is None and prefer_enhanced_audio and not explicit_output:
+        output_device = find_enhanced_audio_device("output")
 
     if output_device is None and auto_bluetooth and input_name:
         output_device = find_wireless_device("output", match_name=input_name)
@@ -227,6 +249,9 @@ def resolve_audio_pair(
     if input_device is None and auto_bluetooth and output_device is not None:
         output_name = sd.query_devices(output_device)["name"]
         input_device = find_wireless_device("input", match_name=output_name)
+
+    if input_device is None and auto_bluetooth and not explicit_input:
+        input_device = find_wireless_device("input")
 
     return input_device, output_device
 
@@ -244,6 +269,7 @@ class VoiceInterface:
         sleep_listen_seconds: int = 2,
         min_peak: float = 0.003,
         auto_bluetooth: bool = True,
+        prefer_enhanced_audio: bool = True,
         on_state_change: Callable[[SpineState], None] | None = None,
     ) -> None:
         self.stt_model_name = stt_model
@@ -256,6 +282,7 @@ class VoiceInterface:
         self._input_pref = input_device
         self._output_pref = output_device
         self.auto_bluetooth = auto_bluetooth
+        self.prefer_enhanced_audio = prefer_enhanced_audio
         self.on_state_change = on_state_change
         self.state = SpineState.IDLE
         self._whisper: WhisperModel | None = None
@@ -268,6 +295,7 @@ class VoiceInterface:
             self._input_pref,
             self._output_pref,
             auto_bluetooth=self.auto_bluetooth,
+            prefer_enhanced_audio=self.prefer_enhanced_audio,
         )
         if prev_in != self.input_device or prev_out != self.output_device:
             self._log_active_devices(verbose=True)
@@ -280,6 +308,7 @@ class VoiceInterface:
             self._input_pref,
             self._output_pref,
             auto_bluetooth=self.auto_bluetooth,
+            prefer_enhanced_audio=self.prefer_enhanced_audio,
         )
         if prev_in != self.input_device or prev_out != self.output_device:
             print("Audio devices updated:")

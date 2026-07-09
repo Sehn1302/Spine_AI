@@ -32,7 +32,9 @@ BANNER = """
     voice                — Enter voice mode (speech in / speech out)
     visual               — Animated orb + voice mode
     devices              — List microphones and speakers
+    capabilities         — Show software detected on this PC
     refresh audio        — Re-scan for newly connected wireless devices
+    refresh capabilities — Re-scan installed host software
 ================================================================
 """
 
@@ -65,6 +67,7 @@ def main() -> None:
         sleep_listen_seconds=wake_cfg.get("sleep_listen_seconds", 2),
         min_peak=voice_cfg.get("min_peak", 0.003),
         auto_bluetooth=voice_cfg.get("auto_bluetooth", True),
+        prefer_enhanced_audio=voice_cfg.get("prefer_enhanced_audio", True),
     )
 
     wake_kwargs = {
@@ -133,6 +136,12 @@ def main() -> None:
 
         if lowered in {"refresh audio", "refresh"}:
             voice.refresh_devices()
+            continue
+
+        if lowered in {"capabilities", "host", "refresh capabilities"}:
+            if lowered == "refresh capabilities":
+                spine.host_caps.refresh()
+            print(f"\n{spine.host_caps.format_report()}\n")
             continue
 
         if lowered == "voice":

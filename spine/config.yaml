@@ -35,6 +35,7 @@ voice:
   input_device: default       # or device name / index from 'devices'
   output_device: default
   auto_bluetooth: true        # auto-use any connected Bluetooth / wireless headset
+  prefer_enhanced_audio: true # use noise-cancelling mics (Armoury Crate, NVIDIA Broadcast, etc.)
   min_peak: 0.003              # lower = better for quiet wireless mics
   conversational: true        # after wake: continuous talk like executive assistant
 
@@ -48,3 +49,8 @@ wake:
   start_asleep: true          # visual/startup: silent until "Spine, wake up"
   sleep_timeout_seconds: 90   # auto-sleep after idle
   sleep_listen_seconds: 2     # short listens while sleeping
+
+host:
+  scan_on_startup: true       # detect installed software on this PC
+  cache_path: "../memory/host_capabilities.json"
+  rescan_hours: 24            # re-scan after this many hours

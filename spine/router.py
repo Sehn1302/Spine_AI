@@ -39,6 +39,14 @@ def parse_natural_command(user_input: str) -> tuple[str, str] | None:
     if lowered.startswith("open "):
         return "pc", f"open {user_input[5:].strip()}"
 
+    if "what software" in lowered or "installed software" in lowered or "what can you use" in lowered:
+        return "pc", "capabilities"
+
+    if any(phrase in lowered for phrase in ("armoury crate", "armory crate", "nvidia broadcast", "g-helper", "lenovo vantage", "realtek audio")):
+        for token in ("armoury crate", "armory crate", "nvidia broadcast", "g-helper", "lenovo vantage", "realtek audio"):
+            if token in lowered:
+                return "pc", f"launch {token}"
+
     if "write" in lowered and ("word" in lowered or "document" in lowered or "file" in lowered):
         return None
 
@@ -85,6 +93,7 @@ def list_agents() -> str:
         "  pc organize <folder>     — Sort files by type\n"
         "  pc duplicates <folder>   — Remove duplicate files\n"
         "  pc cleanup <folder>      — Organize + remove duplicates\n"
+        "  pc capabilities          — Detected host software on this PC\n"
         "\n"
         "Natural voice/text also works:\n"
         "  launch minecraft\n"

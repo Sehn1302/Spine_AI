@@ -51,6 +51,7 @@ def main() -> None:
     config = load_config()
     voice_cfg = config.get("voice", {})
     visual_cfg = config.get("visual", {})
+    wake_cfg = config.get("wake", {})
 
     voice = VoiceInterface(
         stt_model=voice_cfg.get("stt_model", "base"),
@@ -60,7 +61,13 @@ def main() -> None:
         sample_rate=voice_cfg.get("sample_rate", 16000),
         input_device=voice_cfg.get("input_device", "default"),
         output_device=voice_cfg.get("output_device", "default"),
+        sleep_listen_seconds=wake_cfg.get("sleep_listen_seconds", 2),
     )
+
+    wake_kwargs = {
+        "start_awake": not wake_cfg.get("start_asleep", False),
+        "sleep_timeout": wake_cfg.get("sleep_timeout_seconds", 90),
+    }
 
     orb = VisualOrb(
         size=visual_cfg.get("orb_size", 220),
@@ -69,11 +76,12 @@ def main() -> None:
     )
 
     if visual_startup:
+        wake_kwargs["start_awake"] = False
         run_visual_mode(spine, voice, orb)
         return
 
     if voice_startup:
-        run_voice_mode(spine, voice)
+        run_voice_mode(spine, voice, **wake_kwargs)
         return
 
     print(f"Spine: {time_greeting(title)}\n")
@@ -120,7 +128,7 @@ def main() -> None:
             continue
 
         if lowered == "voice":
-            run_voice_mode(spine, voice)
+            run_voice_mode(spine, voice, **wake_kwargs)
             print(f"Spine: {time_greeting(title)}\n")
             continue
 

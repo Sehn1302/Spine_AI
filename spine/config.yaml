@@ -39,3 +39,9 @@ visual:
   orb_size: 220
   always_on_top: true
   position: top-left
+
+wake:
+  enabled: true
+  start_asleep: true          # visual/startup: silent until "Spine, wake up"
+  sleep_timeout_seconds: 90   # auto-sleep after idle
+  sleep_listen_seconds: 2     # short listens while sleeping

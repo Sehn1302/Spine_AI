@@ -17,6 +17,7 @@ from faster_whisper import WhisperModel
 
 
 class SpineState(str, Enum):
+    SLEEPING = "sleeping"
     IDLE = "idle"
     LISTENING = "listening"
     THINKING = "thinking"
@@ -73,12 +74,14 @@ class VoiceInterface:
         sample_rate: int = 16000,
         input_device: int | str | None = None,
         output_device: int | str | None = None,
+        sleep_listen_seconds: int = 2,
         on_state_change: Callable[[SpineState], None] | None = None,
     ) -> None:
         self.stt_model_name = stt_model
         self.stt_device = stt_device
         self.tts_voice = tts_voice
         self.record_seconds = record_seconds
+        self.sleep_listen_seconds = sleep_listen_seconds
         self.sample_rate = sample_rate
         self.input_device = resolve_device(input_device, kind="input")
         self.output_device = resolve_device(output_device, kind="output")
@@ -117,12 +120,12 @@ class VoiceInterface:
             )
         return self._whisper
 
-    def _record_wav(self) -> Path:
+    def _record_wav(self, seconds: int | None = None) -> Path:
+        duration = seconds if seconds is not None else self.record_seconds
         self._set_state(SpineState.LISTENING)
-        print(f"Listening for {self.record_seconds} seconds...")
 
         frames = sd.rec(
-            int(self.record_seconds * self.sample_rate),
+            int(duration * self.sample_rate),
             samplerate=self.sample_rate,
             channels=1,
             dtype="float32",
@@ -133,7 +136,7 @@ class VoiceInterface:
         audio = np.squeeze(frames)
         peak = float(np.max(np.abs(audio))) if audio.size else 0.0
         if peak < 0.01:
-            raise ValueError("No speech detected. Please speak louder or check your microphone.")
+            raise ValueError("No speech detected.")
 
         temp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         temp_path = Path(temp.name)
@@ -148,13 +151,17 @@ class VoiceInterface:
 
         return temp_path
 
+    def _transcribe(self, wav_path: Path) -> str:
+        model = self._get_whisper()
+        segments, _ = model.transcribe(str(wav_path), beam_size=5, language="en")
+        return " ".join(segment.text.strip() for segment in segments).strip()
+
     def listen(self) -> str:
+        print(f"Listening for {self.record_seconds} seconds...")
         wav_path: Path | None = None
         try:
             wav_path = self._record_wav()
-            model = self._get_whisper()
-            segments, _ = model.transcribe(str(wav_path), beam_size=5, language="en")
-            text = " ".join(segment.text.strip() for segment in segments).strip()
+            text = self._transcribe(wav_path)
 
             if not text:
                 raise ValueError("Could not understand speech. Please try again.")
@@ -166,6 +173,28 @@ class VoiceInterface:
                 wav_path.unlink(missing_ok=True)
             if self.state == SpineState.LISTENING:
                 self._set_state(SpineState.IDLE)
+
+    def listen_passive(self, seconds: int | None = None) -> str:
+        """Short listen for wake word — returns empty string on silence."""
+        duration = seconds if seconds is not None else self.sleep_listen_seconds
+        wav_path: Path | None = None
+        try:
+            self._set_state(SpineState.SLEEPING)
+            wav_path = self._record_wav(duration)
+            return self._transcribe(wav_path)
+        except ValueError:
+            return ""
+        except Exception as exc:
+            logging.debug("Passive listen: %s", exc)
+            return ""
+        finally:
+            if wav_path and wav_path.exists():
+                wav_path.unlink(missing_ok=True)
+            if self.state == SpineState.SLEEPING:
+                self._set_state(SpineState.SLEEPING)
+
+    def sleeping(self) -> None:
+        self._set_state(SpineState.SLEEPING)
 
     async def _speak_async(self, text: str, output_path: Path) -> None:
         communicate = edge_tts.Communicate(text, self.tts_voice)

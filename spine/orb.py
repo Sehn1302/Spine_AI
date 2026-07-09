@@ -9,6 +9,7 @@ from voice import SpineState
 
 
 STATE_COLORS = {
+    SpineState.SLEEPING: "#0d1520",
     SpineState.IDLE: "#1e3a5f",
     SpineState.LISTENING: "#2ecc71",
     SpineState.THINKING: "#f39c12",
@@ -16,6 +17,7 @@ STATE_COLORS = {
 }
 
 STATE_GLOW = {
+    SpineState.SLEEPING: "#1a2535",
     SpineState.IDLE: "#2d5a87",
     SpineState.LISTENING: "#58d68d",
     SpineState.THINKING: "#f5b041",
@@ -23,6 +25,7 @@ STATE_GLOW = {
 }
 
 STATE_SCALE = {
+    SpineState.SLEEPING: 0.85,
     SpineState.IDLE: 1.0,
     SpineState.LISTENING: 1.18,
     SpineState.THINKING: 1.08,
@@ -30,6 +33,7 @@ STATE_SCALE = {
 }
 
 STATE_PULSE_SPEED = {
+    SpineState.SLEEPING: 0.008,
     SpineState.IDLE: 0.015,
     SpineState.LISTENING: 0.04,
     SpineState.THINKING: 0.06,
@@ -64,6 +68,7 @@ class VisualOrb:
         self.state = state
         if self.status_label:
             labels = {
+                SpineState.SLEEPING: "Sleeping — say 'Spine, wake up'",
                 SpineState.IDLE: "Idle",
                 SpineState.LISTENING: "Listening...",
                 SpineState.THINKING: "Thinking...",

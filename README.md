@@ -206,6 +206,19 @@ Greetings match the time of day:
 - **12:00–16:59** → *"Good afternoon, Sir. I am online. How may I assist you?"*
 - **17:00+** → *"Good evening, Sir. I am online. How may I assist you?"*
 
+### Start on Windows boot (optional)
+
+Double-click `install_startup.bat` once. After that, each time you log in:
+
+1. Spine waits 15 seconds (for Ollama/audio to load)
+2. The **orb window** appears
+3. Spine **speaks** the time-based greeting
+4. Press **Enter** in the console to speak
+
+Remove with `uninstall_startup.bat`.
+
+**Note:** Ollama must be set to start with Windows (Ollama app → Settings → startup).
+
 ## GPU Note
 
 If Spine runs on CPU only, check that `OLLAMA_NO_GPU` is not set to `1` in Windows environment variables. `run_spine.bat` forces GPU mode automatically.

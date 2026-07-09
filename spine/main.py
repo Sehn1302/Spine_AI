@@ -32,6 +32,7 @@ BANNER = """
     voice                — Enter voice mode (speech in / speech out)
     visual               — Animated orb + voice mode
     devices              — List microphones and speakers
+    refresh audio        — Re-scan for newly connected wireless devices
 ================================================================
 """
 
@@ -128,6 +129,10 @@ def main() -> None:
 
         if lowered == "devices":
             print(f"\n{list_audio_devices()}\n")
+            continue
+
+        if lowered in {"refresh audio", "refresh"}:
+            voice.refresh_devices()
             continue
 
         if lowered == "voice":

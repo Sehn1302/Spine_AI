@@ -32,46 +32,138 @@ def list_audio_devices() -> str:
     lines.append("INPUT (microphones):")
     for i, dev in enumerate(sd.query_devices()):
         if dev["max_input_channels"] > 0:
-            marker = " [DEFAULT]" if i == default_in else ""
+            marker = ""
+            if i == default_in:
+                marker += " [DEFAULT]"
+            if _is_wireless_device(dev["name"]):
+                marker += " [WIRELESS]"
             lines.append(f"  [{i}] {dev['name']}{marker}")
 
     lines.append("")
     lines.append("OUTPUT (speakers / headphones):")
     for i, dev in enumerate(sd.query_devices()):
         if dev["max_output_channels"] > 0:
-            marker = " [DEFAULT]" if i == default_out else ""
+            marker = ""
+            if i == default_out:
+                marker += " [DEFAULT]"
+            if _is_wireless_device(dev["name"]):
+                marker += " [WIRELESS]"
             lines.append(f"  [{i}] {dev['name']}{marker}")
 
     lines.append("")
-    lines.append("Set input_device / output_device in spine/config.yaml (index number).")
-    lines.append("Or set your device as default in Windows Sound settings.")
+    lines.append("With auto_bluetooth: true, Spine uses your Windows default wireless device,")
+    lines.append("or any connected Bluetooth / headset mic and speaker automatically.")
+    lines.append("Set input_device / output_device in spine/config.yaml to pin a specific index.")
     return "\n".join(lines)
 
 
-def find_bluetooth_device(kind: str, keywords: tuple[str, ...] = ("pixel", "buds", "hands-free", "headset")) -> int | None:
-    """Prefer Bluetooth earbud mic/speaker over laptop defaults."""
+_BUILTIN_MARKERS = (
+    "realtek",
+    "microphone array",
+    "intel smart",
+    "internal",
+    "webcam",
+    "amd audio",
+    "conexant",
+    "dolby",
+    "speaker (",
+    "speakers (",
+)
+
+_WIRELESS_MARKERS = (
+    "bluetooth",
+    "hands-free",
+    "headset",
+    "headphones",
+    "earbuds",
+    "earphone",
+    "airpods",
+    "buds",
+    "a2dp",
+    "ag audio",
+    "hfp",
+    "wh-",
+    "bt ",
+    "wireless",
+)
+
+_PROFILE_SUFFIXES = (
+    " hands-free ag audio",
+    " hands-free",
+    " stereo",
+    " a2dp",
+    " headphones",
+    " headset",
+    " ag audio",
+    " hfp",
+)
+
+
+def _is_builtin_device(name: str) -> bool:
+    lowered = name.lower()
+    return any(marker in lowered for marker in _BUILTIN_MARKERS)
+
+
+def _is_wireless_device(name: str) -> bool:
+    lowered = name.lower()
+    if _is_builtin_device(lowered):
+        return False
+    return any(marker in lowered for marker in _WIRELESS_MARKERS)
+
+
+def _device_base_name(name: str) -> str:
+    lowered = name.lower().strip()
+    for suffix in _PROFILE_SUFFIXES:
+        if lowered.endswith(suffix):
+            lowered = lowered[: -len(suffix)].strip()
+    return lowered
+
+
+def _score_wireless_device(name: str, *, kind: str) -> int | None:
+    """Score wireless endpoints; higher is better. None = not a wireless candidate."""
+    lowered = name.lower()
+    if _is_builtin_device(lowered):
+        return None
+    if not _is_wireless_device(lowered):
+        return None
+
+    score = 1
+    if "bluetooth" in lowered:
+        score += 2
+
+    if kind == "input":
+        if "hands-free" in lowered or "headset" in lowered or "hfp" in lowered or "ag audio" in lowered:
+            score += 8
+        if "stereo" in lowered and "hands-free" not in lowered:
+            score -= 4
+    else:
+        if "stereo" in lowered or "a2dp" in lowered or "headphones" in lowered:
+            score += 6
+        if "hands-free" in lowered or "headset" in lowered:
+            score += 1
+
+    return score
+
+
+def find_wireless_device(kind: str, *, match_name: str | None = None) -> int | None:
+    """Pick any connected Bluetooth / wireless mic or speaker."""
     matches: list[tuple[int, int]] = []
+    target = _device_base_name(match_name) if match_name else None
+
     for i, dev in enumerate(sd.query_devices()):
         channels = dev["max_input_channels"] if kind == "input" else dev["max_output_channels"]
         if channels <= 0:
             continue
-        name = dev["name"].lower()
-        if not any(kw in name for kw in keywords):
+
+        score = _score_wireless_device(dev["name"], kind=kind)
+        if score is None:
             continue
 
-        score = 0
-        if "pixel" in name:
-            score += 3
-        if "buds" in name:
-            score += 2
-        if kind == "input":
-            if "hands-free" in name or "headset" in name:
-                score += 5
-        else:
-            if "hands-free" in name or "headset" in name:
-                score -= 2
-            if "stereo" in name or "headphones" in name:
-                score += 3
+        if target:
+            base = _device_base_name(dev["name"])
+            if base == target or target in base or base in target:
+                score += 12
+
         matches.append((score, i))
 
     if not matches:
@@ -80,24 +172,63 @@ def find_bluetooth_device(kind: str, keywords: tuple[str, ...] = ("pixel", "buds
     return matches[0][1]
 
 
-def resolve_device(device: int | str | None, *, kind: str, auto_bluetooth: bool = False) -> int | None:
-    """Resolve device from index, name substring, auto-bluetooth, or system default."""
-    if device is None or device == "" or device == "default":
-        if auto_bluetooth:
-            bt = find_bluetooth_device(kind)
-            if bt is not None:
-                return bt
-        return None
-
+def resolve_device(
+    device: int | str | None,
+    *,
+    kind: str,
+    auto_bluetooth: bool = False,
+    paired_with: str | None = None,
+) -> int | None:
+    """Resolve device from index, name substring, auto-wireless, or system default."""
     if isinstance(device, int) or (isinstance(device, str) and device.isdigit()):
         return int(device)
 
-    name = str(device).lower()
-    for i, dev in enumerate(sd.query_devices()):
-        channels = dev["max_input_channels"] if kind == "input" else dev["max_output_channels"]
-        if channels > 0 and name in dev["name"].lower():
-            return i
+    if device not in (None, "", "default"):
+        name = str(device).lower()
+        for i, dev in enumerate(sd.query_devices()):
+            channels = dev["max_input_channels"] if kind == "input" else dev["max_output_channels"]
+            if channels > 0 and name in dev["name"].lower():
+                return i
+        return None
+
+    if auto_bluetooth:
+        default_idx = sd.default.device[0 if kind == "input" else 1]
+        default_name = sd.query_devices(default_idx)["name"]
+        if _is_wireless_device(default_name):
+            return default_idx
+
+        wireless = find_wireless_device(kind, match_name=paired_with)
+        if wireless is not None:
+            return wireless
+
     return None
+
+
+def resolve_audio_pair(
+    input_pref: int | str | None,
+    output_pref: int | str | None,
+    *,
+    auto_bluetooth: bool,
+) -> tuple[int | None, int | None]:
+    """Resolve mic + speaker, pairing wireless endpoints from the same device when possible."""
+    input_device = resolve_device(input_pref, kind="input", auto_bluetooth=auto_bluetooth)
+    input_name = sd.query_devices(input_device)["name"] if input_device is not None else None
+
+    output_device = resolve_device(
+        output_pref,
+        kind="output",
+        auto_bluetooth=auto_bluetooth,
+        paired_with=input_name,
+    )
+
+    if output_device is None and auto_bluetooth and input_name:
+        output_device = find_wireless_device("output", match_name=input_name)
+
+    if input_device is None and auto_bluetooth and output_device is not None:
+        output_name = sd.query_devices(output_device)["name"]
+        input_device = find_wireless_device("input", match_name=output_name)
+
+    return input_device, output_device
 
 
 class VoiceInterface:
@@ -122,14 +253,39 @@ class VoiceInterface:
         self.sleep_listen_seconds = sleep_listen_seconds
         self.min_peak = min_peak
         self.sample_rate = sample_rate
-        self.input_device = resolve_device(input_device, kind="input", auto_bluetooth=auto_bluetooth)
-        self.output_device = resolve_device(output_device, kind="output", auto_bluetooth=auto_bluetooth)
+        self._input_pref = input_device
+        self._output_pref = output_device
+        self.auto_bluetooth = auto_bluetooth
         self.on_state_change = on_state_change
         self.state = SpineState.IDLE
         self._whisper: WhisperModel | None = None
-        self._log_active_devices()
+        self._apply_devices()
 
-    def _log_active_devices(self) -> None:
+    def _apply_devices(self) -> None:
+        prev_in = getattr(self, "input_device", None)
+        prev_out = getattr(self, "output_device", None)
+        self.input_device, self.output_device = resolve_audio_pair(
+            self._input_pref,
+            self._output_pref,
+            auto_bluetooth=self.auto_bluetooth,
+        )
+        if prev_in != self.input_device or prev_out != self.output_device:
+            self._log_active_devices(verbose=True)
+
+    def refresh_devices(self) -> None:
+        """Re-scan for newly connected Bluetooth / wireless audio devices."""
+        prev_in = self.input_device
+        prev_out = self.output_device
+        self.input_device, self.output_device = resolve_audio_pair(
+            self._input_pref,
+            self._output_pref,
+            auto_bluetooth=self.auto_bluetooth,
+        )
+        if prev_in != self.input_device or prev_out != self.output_device:
+            print("Audio devices updated:")
+            self._log_active_devices(verbose=True)
+
+    def _log_active_devices(self, *, verbose: bool = True) -> None:
         in_idx = self.input_device if self.input_device is not None else sd.default.device[0]
         out_idx = self.output_device if self.output_device is not None else sd.default.device[1]
         try:
@@ -137,8 +293,9 @@ class VoiceInterface:
             out_name = sd.query_devices(out_idx)["name"]
             logging.info("Voice input device: %s", in_name)
             logging.info("Voice output device: %s", out_name)
-            print(f"Microphone: {in_name}")
-            print(f"Speaker:    {out_name}")
+            if verbose:
+                print(f"Microphone: {in_name}")
+                print(f"Speaker:    {out_name}")
         except Exception as exc:
             logging.warning("Could not query audio devices: %s", exc)
 
@@ -211,6 +368,7 @@ class VoiceInterface:
         return " ".join(segment.text.strip() for segment in segments).strip()
 
     def listen(self) -> str:
+        self.refresh_devices()
         print(f"Listening for {self.record_seconds} seconds...")
         wav_path: Path | None = None
         try:
@@ -230,6 +388,7 @@ class VoiceInterface:
 
     def listen_passive(self, seconds: int | None = None) -> str:
         """Short listen for wake word — returns empty string on silence."""
+        self.refresh_devices()
         duration = seconds if seconds is not None else self.sleep_listen_seconds
         wav_path: Path | None = None
         try:
@@ -258,6 +417,7 @@ class VoiceInterface:
         if not text.strip():
             return
 
+        self.refresh_devices()
         self._set_state(SpineState.SPEAKING)
         temp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
         audio_path = Path(temp.name)
@@ -275,7 +435,15 @@ class VoiceInterface:
         try:
             import pygame
 
-            pygame.mixer.init()
+            out_idx = self.output_device if self.output_device is not None else sd.default.device[1]
+            out_name = sd.query_devices(out_idx)["name"]
+
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(devicename=out_name)
+            else:
+                pygame.mixer.quit()
+                pygame.mixer.init(devicename=out_name)
+
             pygame.mixer.music.load(str(path))
             pygame.mixer.music.play()
             while pygame.mixer.music.get_busy():

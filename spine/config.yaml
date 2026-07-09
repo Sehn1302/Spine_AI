@@ -32,10 +32,10 @@ voice:
   tts_voice: "en-GB-RyanNeural"
   record_seconds: 6
   sample_rate: 16000
-  input_device: default       # or "pixel buds" / device index from 'devices'
+  input_device: default       # or device name / index from 'devices'
   output_device: default
-  auto_bluetooth: true        # auto-pick Pixel Buds / hands-free mic
-  min_peak: 0.003              # lower = better for quiet bluetooth mics
+  auto_bluetooth: true        # auto-use any connected Bluetooth / wireless headset
+  min_peak: 0.003              # lower = better for quiet wireless mics
   conversational: true        # after wake: continuous talk like executive assistant
 
 visual:

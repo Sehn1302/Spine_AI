@@ -6,8 +6,6 @@ DEFAULT_WAKE_PHRASES = (
     "spine wake up",
     "spine wakeup",
     "spine, wake up",
-    "wake up spine",
-    "hey spine",
 )
 
 DEFAULT_SLEEP_PHRASES = (
@@ -24,9 +22,14 @@ def _normalize(text: str) -> str:
     return "".join(ch for ch in text.lower() if ch.isalnum() or ch.isspace()).strip()
 
 
-def is_wake_phrase(text: str, phrases: tuple[str, ...] = DEFAULT_WAKE_PHRASES) -> bool:
+def is_wake_phrase(text: str, phrases: tuple[str, ...] | None = None) -> bool:
+    """Only wake on explicit 'Spine wake up' — ignores other speech."""
+    active = phrases or DEFAULT_WAKE_PHRASES
     normalized = _normalize(text)
-    return any(p.replace(",", "") in normalized for p in phrases)
+    for phrase in active:
+        if _normalize(phrase.replace(",", "")) in normalized:
+            return True
+    return False
 
 
 def is_sleep_phrase(text: str, phrases: tuple[str, ...] = DEFAULT_SLEEP_PHRASES) -> bool:

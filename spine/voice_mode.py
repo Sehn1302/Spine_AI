@@ -18,20 +18,15 @@ def _enter_sleep(voice: VoiceInterface, title: str, *, speak: bool = False) -> N
         voice.speak(sleep_response(title))
 
 
-def _wait_for_wake(voice: VoiceInterface, title: str) -> bool:
+def _wait_for_wake(voice: VoiceInterface, title: str, wake_phrases: tuple[str, ...]) -> bool:
+    """Listen silently — only 'Spine wake up' activates Spine."""
     voice.sleeping()
     while True:
-        if msvcrt.kbhit():
-            msvcrt.getch()
+        text = voice.listen_passive()
+        if text and is_wake_phrase(text, wake_phrases):
+            print(f'Wake phrase detected: "{text}"')
             voice.speak(wake_response(title))
             return True
-
-        text = voice.listen_passive()
-        if text:
-            print(f'Heard: "{text}"')
-            if is_wake_phrase(text):
-                voice.speak(wake_response(title))
-                return True
         time.sleep(0.05)
 
 
@@ -90,13 +85,15 @@ def run_voice_mode(
     start_awake: bool = False,
     sleep_timeout: int = 90,
     conversational: bool = True,
+    wake_phrases: tuple[str, ...] | None = None,
 ) -> None:
     title = spine.user_title
     awake = start_awake
+    phrases = wake_phrases or ("spine wake up", "spine wakeup", "spine, wake up")
 
     print("\n================================================================")
-    print("   VOICE MODE — hands-free after wake")
-    print("   Say 'Spine, wake up' then talk naturally")
+    print("   VOICE MODE — sleeping until wake phrase")
+    print("   Say 'Spine, wake up' to activate")
     print("   Say 'Spine, sleep' to go silent | 'exit' to quit")
     print("================================================================\n")
 
@@ -109,7 +106,7 @@ def run_voice_mode(
 
     while True:
         if not awake:
-            if not _wait_for_wake(voice, title):
+            if not _wait_for_wake(voice, title, phrases):
                 continue
             awake = True
             if conversational:

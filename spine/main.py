@@ -42,10 +42,13 @@ BANNER = """
 def main() -> None:
     voice_startup = "--voice" in sys.argv
     visual_startup = "--visual" in sys.argv
-    print(BANNER)
+    boot_startup = "--startup" in sys.argv
+
+    if not boot_startup:
+        print(BANNER)
 
     try:
-        spine = SpineOrchestrator()
+        spine = SpineOrchestrator(quiet=boot_startup)
     except Exception as exc:
         print(f"Failed to initialize Spine: {exc}")
         sys.exit(1)
@@ -56,6 +59,8 @@ def main() -> None:
     visual_cfg = config.get("visual", {})
     wake_cfg = config.get("wake", {})
 
+    wake_phrases = tuple(wake_cfg.get("phrases", ["spine wake up", "spine wakeup", "spine, wake up"]))
+
     voice = VoiceInterface(
         stt_model=voice_cfg.get("stt_model", "base"),
         stt_device=voice_cfg.get("stt_device", "cuda"),
@@ -64,16 +69,19 @@ def main() -> None:
         sample_rate=voice_cfg.get("sample_rate", 16000),
         input_device=voice_cfg.get("input_device", "default"),
         output_device=voice_cfg.get("output_device", "default"),
-        sleep_listen_seconds=wake_cfg.get("sleep_listen_seconds", 2),
-        min_peak=voice_cfg.get("min_peak", 0.003),
+        sleep_listen_seconds=wake_cfg.get("sleep_listen_seconds", 3),
+        min_peak=voice_cfg.get("min_peak", 0.006),
+        passive_min_peak=voice_cfg.get("passive_min_peak", 0.012),
         auto_bluetooth=voice_cfg.get("auto_bluetooth", True),
         prefer_enhanced_audio=voice_cfg.get("prefer_enhanced_audio", True),
+        noise_cancellation=voice_cfg.get("noise_cancellation", True),
     )
 
     wake_kwargs = {
         "start_awake": not wake_cfg.get("start_asleep", False),
         "sleep_timeout": wake_cfg.get("sleep_timeout_seconds", 90),
         "conversational": voice_cfg.get("conversational", True),
+        "wake_phrases": wake_phrases,
     }
 
     orb = VisualOrb(
@@ -84,7 +92,7 @@ def main() -> None:
 
     if visual_startup:
         wake_kwargs["start_awake"] = False
-        run_visual_mode(spine, voice, orb)
+        run_visual_mode(spine, voice, orb, wake_kwargs=wake_kwargs)
         return
 
     if voice_startup:
@@ -150,7 +158,7 @@ def main() -> None:
             continue
 
         if lowered == "visual":
-            run_visual_mode(spine, voice, orb)
+            run_visual_mode(spine, voice, orb, wake_kwargs=wake_kwargs)
             print(f"Spine: {time_greeting(title)}\n")
             continue
 

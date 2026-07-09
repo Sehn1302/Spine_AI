@@ -13,8 +13,9 @@ echo call "%~dp0startup_spine.bat"
 
 echo.
 echo Spine will now start automatically when you log in to Windows.
-echo   - Animated orb will appear
-echo   - Spine will speak: "Good morning/afternoon/evening, Sir. I am online. How may I assist you?"
+echo   - Small orb appears in the corner
+echo   - Spine stays SILENT until you say "Spine, wake up"
+echo   - Noise cancellation filters background sounds
 echo.
 echo Installed to:
 echo   %LINK%

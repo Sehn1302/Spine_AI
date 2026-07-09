@@ -36,7 +36,9 @@ voice:
   output_device: default
   auto_bluetooth: true        # auto-use any connected Bluetooth / wireless headset
   prefer_enhanced_audio: true # use noise-cancelling mics (Armoury Crate, NVIDIA Broadcast, etc.)
-  min_peak: 0.003              # lower = better for quiet wireless mics
+  noise_cancellation: true    # software VAD + speech gate — ignores background noise
+  min_peak: 0.006              # minimum speech level for active listening
+  passive_min_peak: 0.012      # higher threshold while sleeping — ignores ambient noise
   conversational: true        # after wake: continuous talk like executive assistant
 
 visual:
@@ -46,9 +48,13 @@ visual:
 
 wake:
   enabled: true
-  start_asleep: true          # visual/startup: silent until "Spine, wake up"
+  start_asleep: true          # silent until "Spine, wake up"
   sleep_timeout_seconds: 90   # auto-sleep after idle
-  sleep_listen_seconds: 2     # short listens while sleeping
+  sleep_listen_seconds: 3     # short listens while sleeping
+  phrases:                    # ONLY these phrases wake Spine
+    - "spine wake up"
+    - "spine wakeup"
+    - "spine, wake up"
 
 host:
   scan_on_startup: true       # detect installed software on this PC

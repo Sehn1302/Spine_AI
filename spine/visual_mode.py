@@ -10,8 +10,14 @@ from voice import SpineState, VoiceInterface
 from voice_mode import run_voice_mode
 
 
-def run_visual_mode(spine: SpineOrchestrator, voice: VoiceInterface, orb: VisualOrb) -> None:
-    title = spine.user_title
+def run_visual_mode(
+    spine: SpineOrchestrator,
+    voice: VoiceInterface,
+    orb: VisualOrb,
+    *,
+    wake_kwargs: dict | None = None,
+) -> None:
+    options = {"skip_greeting": True, "start_awake": False, **(wake_kwargs or {})}
 
     def on_state_change(state: SpineState) -> None:
         orb.set_state(state)
@@ -20,14 +26,7 @@ def run_visual_mode(spine: SpineOrchestrator, voice: VoiceInterface, orb: Visual
 
     def voice_thread() -> None:
         orb.set_state(SpineState.SLEEPING)
-        run_voice_mode(
-            spine,
-            voice,
-            skip_greeting=True,
-            start_awake=False,
-            sleep_timeout=90,
-            conversational=True,
-        )
+        run_voice_mode(spine, voice, **options)
         orb.stop()
 
     thread = threading.Thread(target=voice_thread, daemon=True)

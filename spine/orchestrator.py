@@ -54,8 +54,9 @@ def setup_logging(logs_dir: str) -> None:
 
 
 class SpineOrchestrator:
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None, *, quiet: bool = False) -> None:
         self.config = config or load_config()
+        self.quiet = quiet
         setup_logging(self.config["paths"]["logs"])
         self.action_log = ActionLog(self.config["paths"]["logs"])
 
@@ -94,8 +95,9 @@ class SpineOrchestrator:
         )
         if host_cfg.get("scan_on_startup", True):
             self.host_caps.load_or_scan()
-            print(self.host_caps.format_report())
-            print()
+            if not self.quiet:
+                print(self.host_caps.format_report())
+                print()
 
         self.agents = {
             "research": ResearchAgent(self.model, self.user_title),

@@ -112,6 +112,38 @@ _PROFILE_SUFFIXES = (
 )
 
 
+def _frame_rms(audio: np.ndarray) -> float:
+    return float(np.sqrt(np.mean(audio**2))) if audio.size else 0.0
+
+
+def _trim_to_speech(audio: np.ndarray, sample_rate: int, *, threshold: float = 0.012) -> np.ndarray:
+    """Trim silence edges so Whisper only processes actual speech."""
+    frame_len = max(1, int(sample_rate * 0.025))
+    if audio.size <= frame_len:
+        return audio
+
+    speech_starts: list[int] = []
+    for start in range(0, len(audio) - frame_len + 1, frame_len):
+        if _frame_rms(audio[start : start + frame_len]) >= threshold:
+            speech_starts.append(start)
+
+    if not speech_starts:
+        return audio
+
+    pad = int(sample_rate * 0.08)
+    begin = max(0, speech_starts[0] - pad)
+    end = min(len(audio), speech_starts[-1] + frame_len + pad)
+    return audio[begin:end]
+
+
+def _has_speech(audio: np.ndarray, *, threshold: float) -> bool:
+    if audio.size == 0:
+        return False
+    peak = float(np.max(np.abs(audio)))
+    rms = _frame_rms(audio)
+    return peak >= threshold or rms >= threshold * 0.6
+
+
 def _is_builtin_device(name: str) -> bool:
     lowered = name.lower()
     return any(marker in lowered for marker in _BUILTIN_MARKERS)
@@ -267,9 +299,11 @@ class VoiceInterface:
         input_device: int | str | None = None,
         output_device: int | str | None = None,
         sleep_listen_seconds: int = 2,
-        min_peak: float = 0.003,
+        min_peak: float = 0.006,
+        passive_min_peak: float = 0.012,
         auto_bluetooth: bool = True,
         prefer_enhanced_audio: bool = True,
+        noise_cancellation: bool = True,
         on_state_change: Callable[[SpineState], None] | None = None,
     ) -> None:
         self.stt_model_name = stt_model
@@ -278,11 +312,13 @@ class VoiceInterface:
         self.record_seconds = record_seconds
         self.sleep_listen_seconds = sleep_listen_seconds
         self.min_peak = min_peak
+        self.passive_min_peak = passive_min_peak
         self.sample_rate = sample_rate
         self._input_pref = input_device
         self._output_pref = output_device
         self.auto_bluetooth = auto_bluetooth
         self.prefer_enhanced_audio = prefer_enhanced_audio
+        self.noise_cancellation = noise_cancellation
         self.on_state_change = on_state_change
         self.state = SpineState.IDLE
         self._whisper: WhisperModel | None = None
@@ -371,10 +407,16 @@ class VoiceInterface:
 
         audio = np.squeeze(frames)
         peak = float(np.max(np.abs(audio))) if audio.size else 0.0
-        if peak < threshold:
+        if not _has_speech(audio, threshold=threshold):
             raise ValueError("No speech detected.")
 
-        # Normalize quiet Bluetooth mics
+        if self.noise_cancellation:
+            audio = _trim_to_speech(audio, self.sample_rate, threshold=threshold * 0.75)
+            if not _has_speech(audio, threshold=threshold * 0.5):
+                raise ValueError("No speech detected.")
+
+        # Normalize quiet Bluetooth / enhanced mics
+        peak = float(np.max(np.abs(audio))) if audio.size else 0.0
         if peak < 0.15:
             audio = audio * (0.15 / peak)
 
@@ -393,7 +435,15 @@ class VoiceInterface:
 
     def _transcribe(self, wav_path: Path) -> str:
         model = self._get_whisper()
-        segments, _ = model.transcribe(str(wav_path), beam_size=5, language="en")
+        kwargs: dict = {"beam_size": 5, "language": "en"}
+        if self.noise_cancellation:
+            kwargs["vad_filter"] = True
+            kwargs["vad_parameters"] = {
+                "min_silence_duration_ms": 400,
+                "speech_pad_ms": 250,
+                "threshold": 0.55,
+            }
+        segments, _ = model.transcribe(str(wav_path), **kwargs)
         return " ".join(segment.text.strip() for segment in segments).strip()
 
     def listen(self) -> str:
@@ -416,13 +466,17 @@ class VoiceInterface:
                 self._set_state(SpineState.IDLE)
 
     def listen_passive(self, seconds: int | None = None) -> str:
-        """Short listen for wake word — returns empty string on silence."""
+        """Short listen for wake phrase — ignores background noise."""
         self.refresh_devices()
         duration = seconds if seconds is not None else self.sleep_listen_seconds
         wav_path: Path | None = None
         try:
             self._set_state(SpineState.SLEEPING)
-            wav_path = self._record_wav(duration, min_peak=self.min_peak * 0.5, listening_state=False)
+            wav_path = self._record_wav(
+                duration,
+                min_peak=self.passive_min_peak,
+                listening_state=False,
+            )
             return self._transcribe(wav_path)
         except ValueError:
             return ""

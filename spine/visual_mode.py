@@ -6,6 +6,7 @@ import logging
 import sys
 import threading
 
+from boot import release_instance_lock
 from orchestrator import SpineOrchestrator
 from orb import VisualOrb
 from tray import run_tray
@@ -33,7 +34,7 @@ def run_visual_mode(spine: SpineOrchestrator, voice: VoiceInterface, orb: Visual
     visual_cfg = spine.config.get("visual", {})
     if visual_cfg.get("tray_icon", True):
         run_tray(
-            on_quit=lambda: (stop_event.set(), orb.stop(), sys.exit(0)),
+            on_quit=lambda: (stop_event.set(), orb.stop(), release_instance_lock(), sys.exit(0)),
             title="Spine AI",
         )
 

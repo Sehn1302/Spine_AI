@@ -59,5 +59,13 @@ scheduler:
   enabled: true
   check_interval_seconds: 60
 
+boot:
+  enabled: true
+  single_instance: true
+  wait_for_ollama: true
+  ollama_timeout_seconds: 90
+  audio_warmup_seconds: 12
+  preload_whisper: true
+
 host:
   scan_on_startup: false

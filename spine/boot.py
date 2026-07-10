@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import subprocess
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCK_FILE = ROOT / "memory" / ".spine_running"
+_lock_registered = False
 
 
 def boot_log_path(logs_dir: str) -> Path:
@@ -48,6 +50,8 @@ def ensure_single_instance() -> bool:
     if LOCK_FILE.exists():
         try:
             old_pid = int(LOCK_FILE.read_text(encoding="utf-8").strip())
+            if old_pid == os.getpid():
+                return True
             if _pid_alive(old_pid):
                 logging.warning("Spine already running (PID %s). Exiting duplicate.", old_pid)
                 return False
@@ -199,3 +203,70 @@ def preload_voice(voice) -> bool:
     except Exception as exc:
         logging.error("Speech model failed to load: %s", exc)
         return False
+
+
+def prepare_environment() -> None:
+    """GPU env for Ollama + CUDA DLL path for Whisper."""
+    ensure_gpu_env()
+    try:
+        from cuda_paths import ensure_cuda_dll_path
+
+        ensure_cuda_dll_path()
+    except ImportError:
+        pass
+
+
+def register_shutdown_hook() -> None:
+    global _lock_registered
+    if _lock_registered:
+        return
+    atexit.register(release_instance_lock)
+    _lock_registered = True
+
+
+def run_boot_sequence(
+    config: dict[str, Any],
+    *,
+    login_boot: bool = False,
+    needs_voice: bool = False,
+    voice=None,
+) -> bool:
+    """
+    Run startup checks. Returns False if this process should exit (duplicate instance).
+  """
+    boot_cfg = config.get("boot", {})
+    if not boot_cfg.get("enabled", True):
+        prepare_environment()
+        return True
+
+    logs_dir = config.get("paths", {}).get("logs", str(ROOT / "logs"))
+    Path(logs_dir).mkdir(parents=True, exist_ok=True)
+
+    if login_boot:
+        setup_boot_logging(logs_dir)
+
+    prepare_environment()
+    logging.info("Spine boot sequence started (login_boot=%s)", login_boot)
+
+    if boot_cfg.get("single_instance", True):
+        if not ensure_single_instance():
+            return False
+        register_shutdown_hook()
+
+    if boot_cfg.get("wait_for_ollama", True):
+        timeout = int(boot_cfg.get("ollama_timeout_seconds", 90))
+        if not wait_for_ollama(timeout):
+            logging.warning("Continuing without confirmed Ollama — some features may fail until it starts.")
+
+    if login_boot:
+        audio_wait = float(boot_cfg.get("audio_warmup_seconds", 12))
+        if audio_wait > 0:
+            wait_for_audio(audio_wait)
+
+    log_gpu_status()
+
+    if needs_voice and boot_cfg.get("preload_whisper", True) and voice is not None:
+        preload_voice(voice)
+
+    logging.info("Boot sequence complete.")
+    return True

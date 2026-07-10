@@ -44,7 +44,7 @@ models train spine-custom   — build model from your notes
 - **Tray icon** — system tray (right-click Quit)
 - **Scheduler** — daily 8am knowledge index (`memory/scheduler.json`)
 - **Auto-index** — indexes `memory/knowledge/` on startup
-- **Boot** — starts on Windows login via `Install Startup.bat`
+- **Boot** — waits for Ollama, audio warmup, single-instance guard, Whisper preload (`Install Startup.bat`)
 - **Stress test** — multi-LLM routing & concurrency: `Scripts\run_stress_test.bat`
 
 ## Logs

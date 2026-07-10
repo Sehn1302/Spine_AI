@@ -5,6 +5,7 @@ call "%~dp0Scripts\_common.bat"
 
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
 set "VBS=%STARTUP%\Spine_AI_Startup.vbs"
+set "LAUNCHER=%ROOT%\Scripts\startup_spine.bat"
 
 (
 echo ' Spine — start on Windows login
@@ -16,13 +17,14 @@ echo Set fso = CreateObject^("Scripting.FileSystemObject"^)
 echo If fso.FileExists^(ollama^) Then
 echo     WshShell.Run """""" ^& ollama ^& """""", 0, False
 echo End If
-echo py = root ^& "\.venv\Scripts\pythonw.exe"
-echo main = root ^& "\spine\main.py"
-echo WshShell.Run """""" ^& py ^& """ """ ^& main ^& """ --visual", 0, False
+echo WScript.Sleep 3000
+echo launcher = "%LAUNCHER%"
+echo WshShell.Run """""" ^& launcher ^& """""", 0, False
 ) > "%VBS%"
 
 echo.
 echo Spine will start automatically when you log in.
 echo   %VBS%
+echo   Uses: %LAUNCHER%
 echo.
 pause
